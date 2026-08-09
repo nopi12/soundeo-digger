@@ -1,0 +1,235 @@
+.trackitem.soundeo-digger-hidden-downloaded,
+.trackitem.soundeo-digger-hidden-listened,
+.trackitem.soundeo-digger-hidden-blocked {
+  display: none !important;
+}
+
+html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
+  display: none !important;
+}
+
+.trackitem[data-soundeo-digger-played] .vis {
+  outline: 2px solid #ff6a3d;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.trackitem[data-soundeo-digger-fav-artist] {
+  background: linear-gradient(
+    90deg,
+    rgba(61, 207, 145, 0.18),
+    rgba(61, 207, 145, 0.04) 48%,
+    transparent 78%
+  ) !important;
+  box-shadow: inset 3px 0 0 #3dcf91;
+}
+
+.trackitem[data-soundeo-digger-fav-artist] .info strong a {
+  color: #3dcf91 !important;
+}
+
+.trackitem .sd-play-wrap {
+  float: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+}
+
+.trackitem .sd-play-wrap > button.action {
+  float: none !important;
+  margin: 0 !important;
+}
+
+.sd-skip-btn {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #2d8cff;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: background 0.12s ease, transform 0.08s ease;
+}
+
+.sd-skip-btn:hover {
+  background: #1f7ae6;
+}
+
+.sd-skip-btn:active {
+  transform: scale(0.96);
+}
+
+.sd-skip-btn svg {
+  display: block;
+}
+
+/* Soundeo native track favorite + download area */
+.trackitem > button.favorites {
+  display: none !important;
+}
+
+.trackitem .download.sd-download-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+}
+
+.trackitem .download a.track-download-lnk[data-track-format="1"],
+.trackitem .download a[data-track-format="1"] {
+  display: none !important;
+}
+
+.sd-artist-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  align-self: center;
+  margin: 0 8px 0 4px;
+  vertical-align: middle;
+}
+
+.sd-artist-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #c8d0da;
+  background: #fff;
+  color: #6b7785;
+  font: 700 12px "Segoe UI", system-ui, sans-serif;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.sd-artist-btn:hover {
+  color: #1f2933;
+  border-color: #9aa5b1;
+  background: #f5f7fa;
+}
+
+.sd-artist-fav.is-active,
+.sd-artist-fav:hover {
+  color: #1f9d62;
+  border-color: rgba(31, 157, 98, 0.55);
+  background: rgba(31, 157, 98, 0.1);
+}
+
+.sd-artist-block.is-active,
+.sd-artist-block:hover {
+  color: #e05a2b;
+  border-color: rgba(224, 90, 43, 0.55);
+  background: rgba(224, 90, 43, 0.1);
+}
+
+.sd-artist-download:hover {
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.55);
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.sd-artist-download.is-downloaded {
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+#soundeo-digger-tempo {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid #2c3542;
+  background: rgba(18, 21, 26, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font: 600 11px "Segoe UI", system-ui, sans-serif;
+  color: #e8edf4;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  user-select: none;
+  min-width: 220px;
+}
+
+#soundeo-digger-tempo .sd-tempo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#soundeo-digger-tempo .sd-tempo-title {
+  color: #8b97a8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  min-width: 28px;
+}
+
+#soundeo-digger-tempo .sd-tempo-slider {
+  flex: 1;
+  min-width: 140px;
+  accent-color: #ff6a3d;
+  cursor: pointer;
+}
+
+#soundeo-digger-tempo .sd-tempo-value {
+  min-width: 32px;
+  color: #ff6a3d;
+  text-align: right;
+  font-size: 13px;
+}
+
+#soundeo-digger-tempo .sd-tempo-meta {
+  color: #8b97a8;
+  font-weight: 500;
+  font-size: 10px;
+  text-align: right;
+  padding-left: 38px;
+}
+
+#soundeo-digger-tempo .sd-overlay-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+#soundeo-digger-tempo .sd-random-week-btn {
+  border: 1px solid #3a4554;
+  border-radius: 999px;
+  background: rgba(255, 106, 61, 0.14);
+  color: #ff8a66;
+  font: 600 10px "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+#soundeo-digger-tempo .sd-random-week-btn:hover {
+  background: rgba(255, 106, 61, 0.24);
+  border-color: rgba(255, 106, 61, 0.55);
+  color: #ffb199;
+}

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Soundeo Digger</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>Soundeo Digger</h1>
+    </div>
+    <p class="subtitle" id="current-context">Charts navigieren</p>
+  </header>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Woche</h2>
+      <span class="badge" id="week-label">Diese Woche</span>
+    </div>
+    <div class="week-controls">
+      <button type="button" class="btn btn-secondary" id="btn-last-week" title="Vorherige Woche">
+        ← Last Week
+      </button>
+      <button type="button" class="btn btn-secondary" id="btn-this-week" title="Aktuelle Woche">
+        This Week
+      </button>
+      <button type="button" class="btn btn-secondary" id="btn-next-week" title="Nächste Woche">
+        Next Week →
+      </button>
+    </div>
+    <div class="random-row">
+      <button type="button" class="btn btn-accent" id="btn-random-week">
+        Random Week
+      </button>
+      <label class="years-label">
+        Letzte
+        <input type="number" id="random-years" min="1" max="20" value="3" />
+        Jahre
+      </label>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Tracks</h2>
+    </div>
+    <div class="toggle-stack">
+      <label class="toggle">
+        <input type="checkbox" id="hide-downloaded" />
+        <span class="toggle-ui" aria-hidden="true"></span>
+        <span class="toggle-text">Bereits heruntergeladene ausblenden</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="hide-listened" />
+        <span class="toggle-ui" aria-hidden="true"></span>
+        <span class="toggle-text">Selbst getrackte Plays ausblenden</span>
+      </label>
+      <div class="played-meta">
+        <span id="played-count">0 Plays gespeichert</span>
+        <button type="button" class="btn btn-ghost" id="btn-clear-played" title="Gespeicherte Plays löschen">
+          Liste leeren
+        </button>
+      </div>
+      <p class="hint">Play = speichern. Bleibt sichtbar bis nächster Track oder 10 s. Alt+Klick = Play toggeln. Pro Track: ★ Favorit / ✕ blockieren.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Artists</h2>
+    </div>
+    <div class="artist-group">
+      <div class="section-head tight">
+        <h3>Favoriten</h3>
+        <span class="count" id="artist-fav-count">0</span>
+      </div>
+      <div id="artist-fav-list" class="artist-chips empty">
+        <p class="empty-hint">Noch keine Artist-Favoriten.</p>
+      </div>
+      <form class="artist-add" id="artist-fav-form">
+        <input type="text" id="artist-fav-input" placeholder="Artist hinzufügen…" autocomplete="off" />
+        <button type="submit" class="btn btn-ghost">★</button>
+      </form>
+    </div>
+    <div class="artist-group">
+      <div class="section-head tight">
+        <h3>Blockiert</h3>
+        <span class="count" id="artist-block-count">0</span>
+      </div>
+      <div id="artist-block-list" class="artist-chips empty">
+        <p class="empty-hint">Keine blockierten Artists.</p>
+      </div>
+      <form class="artist-add" id="artist-block-form">
+        <input type="text" id="artist-block-input" placeholder="Artist blockieren…" autocomplete="off" />
+        <button type="submit" class="btn btn-ghost">✕</button>
+      </form>
+    </div>
+    <p class="hint">Pro Track ★ / ✕ anklicken, oder hier Namen eintragen. Blockierte Artists verschwinden; Favoriten werden grün hervorgehoben.</p>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Preview-BPM</h2>
+      <span class="badge" id="tempo-label">120</span>
+    </div>
+    <div class="tempo-row">
+      <span class="tempo-bound">80</span>
+      <input type="range" id="tempo-slider" class="tempo-slider" min="80" max="160" step="1" value="120" />
+      <span class="tempo-bound">160</span>
+    </div>
+    <div class="tempo-actions">
+      <button type="button" class="btn btn-ghost" id="btn-tempo-reset">Reset 120</button>
+    </div>
+    <p class="hint">
+      Feste Ziel-BPM (Standard 120). Beim Play wird die Track-BPM geladen und per Re-Pitch
+      angeglichen (±20 % Max).
+    </p>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Genre-Favoriten</h2>
+      <span class="count" id="fav-count">0</span>
+    </div>
+    <div id="favorites-list" class="fav-chips empty">
+      <p class="empty-hint">Stern bei Genres tippen, um Favoriten zu speichern.</p>
+    </div>
+  </section>
+
+  <section class="section grow">
+    <div class="section-head">
+      <h2>Genres</h2>
+      <input
+        type="search"
+        id="genre-search"
+        class="search"
+        placeholder="Suchen…"
+        autocomplete="off"
+      />
+    </div>
+    <div id="genres-list" class="genre-list"></div>
+  </section>
+
+  <script src="genres.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
