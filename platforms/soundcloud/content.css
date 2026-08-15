@@ -1,0 +1,16 @@
+/* Hard hide filtered feed rows */
+li.soundList__item.digger-sc-hidden-title,
+.soundList__item.digger-sc-hidden-title {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+}
+
+#digger-sc-feed-bar .digger-sc-filter-input:focus {
+  border-color: #ff5500 !important;
+  box-shadow: 0 0 0 2px rgba(255, 85, 0, 0.25);
+}

@@ -1,16 +1,20 @@
 {
   "manifest_version": 3,
-  "name": "Soundeo Digger",
-  "version": "1.5.8",
-  "description": "Soundeo Digging: Genres, Artists blocken/favorisieren, Preview-BPM, Downloads/Plays ausblenden.",
+  "name": "Digger",
+  "version": "1.6.3",
+  "description": "Digging für Soundeo & SoundCloud: Charts, Preview-Tempo, Title-Filter, Artists.",
   "permissions": ["storage", "activeTab", "tabs"],
-  "host_permissions": ["https://soundeo.com/*"],
+  "host_permissions": [
+    "https://soundeo.com/*",
+    "https://soundcloud.com/*",
+    "https://*.soundcloud.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Soundeo Digger",
+    "default_title": "Digger",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -25,14 +29,32 @@
   "content_scripts": [
     {
       "matches": ["https://soundeo.com/*"],
-      "js": ["page-hook.js"],
+      "js": ["shared/page-hook.js"],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
       "matches": ["https://soundeo.com/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "js": ["platforms/soundeo/content.js"],
+      "css": ["platforms/soundeo/content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://soundcloud.com/*",
+        "https://*.soundcloud.com/*"
+      ],
+      "js": ["shared/page-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://soundcloud.com/*",
+        "https://*.soundcloud.com/*"
+      ],
+      "js": ["platforms/soundcloud/content.js"],
+      "css": ["platforms/soundcloud/content.css"],
       "run_at": "document_idle"
     }
   ]

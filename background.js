@@ -6,9 +6,20 @@ const TARGET_BPM_KEY = "targetBpm";
 const BPM_CACHE_KEY = "bpmCache";
 const BLOCKED_ARTISTS_KEY = "blockedArtists";
 const FAVORITE_ARTISTS_KEY = "favoriteArtists";
+const SC_TITLE_FILTER_KEY = "scTitleFilter";
 const DEFAULT_TARGET_BPM = 120;
 const BPM_SLIDER_MIN = 80;
 const BPM_SLIDER_MAX = 160;
+
+const PLATFORM_URLS = {
+  soundeo: ["https://soundeo.com/*"],
+  soundcloud: ["https://soundcloud.com/*", "https://*.soundcloud.com/*"],
+  all: [
+    "https://soundeo.com/*",
+    "https://soundcloud.com/*",
+    "https://*.soundcloud.com/*"
+  ]
+};
 
 function clampRate(rate) {
   const n = Number(rate);
@@ -51,6 +62,10 @@ function sanitizeArtistList(list) {
     out.push(name);
   }
   return out;
+}
+
+function sanitizeTitleFilter(value) {
+  return String(value || "").trim().slice(0, 120);
 }
 
 async function getPlayed() {
@@ -102,8 +117,8 @@ async function getArtistLists() {
   };
 }
 
-function broadcastToSoundeoTabs(payload) {
-  chrome.tabs.query({ url: "https://soundeo.com/*" }, (tabs) => {
+function broadcastToTabs(urls, payload) {
+  chrome.tabs.query({ url: urls }, (tabs) => {
     for (const tab of tabs) {
       if (!tab.id) continue;
       chrome.tabs.sendMessage(tab.id, payload, () => {
@@ -113,12 +128,29 @@ function broadcastToSoundeoTabs(payload) {
   });
 }
 
+function broadcastToSoundeoTabs(payload) {
+  broadcastToTabs(PLATFORM_URLS.soundeo, payload);
+}
+
+function broadcastToSoundcloudTabs(payload) {
+  broadcastToTabs(PLATFORM_URLS.soundcloud, payload);
+}
+
+function broadcastToAllPlatformTabs(payload) {
+  broadcastToTabs(PLATFORM_URLS.all, payload);
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || !message.type) return;
 
   if (message.type === "BG_GET_STATE") {
     Promise.all([
-      chrome.storage.sync.get(["hideDownloaded", "hideListened", "randomYears"]),
+      chrome.storage.sync.get([
+        "hideDownloaded",
+        "hideListened",
+        "randomYears",
+        SC_TITLE_FILTER_KEY
+      ]),
       getPlayed(),
       getPlaybackRate(),
       getTargetBpm(),
@@ -136,7 +168,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           bpmCache,
           blockedArtists: artists.blockedArtists,
           favoriteArtists: artists.favoriteArtists,
-          randomYears: Math.max(1, Math.min(20, Number(sync.randomYears) || 3))
+          randomYears: Math.max(1, Math.min(20, Number(sync.randomYears) || 3)),
+          scTitleFilter: sanitizeTitleFilter(sync[SC_TITLE_FILTER_KEY])
         });
       })
       .catch((err) => {
@@ -164,7 +197,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     chrome.storage.local
       .set({ [PLAYBACK_RATE_KEY]: playbackRate })
       .then(() => {
-        broadcastToSoundeoTabs({ type: "RATE_CHANGED", playbackRate });
+        broadcastToAllPlatformTabs({ type: "RATE_CHANGED", playbackRate });
         sendResponse({ ok: true, playbackRate });
       })
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
@@ -220,6 +253,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "BG_SET_SC_TITLE_FILTER") {
+    const scTitleFilter = sanitizeTitleFilter(message.scTitleFilter);
+    chrome.storage.sync
+      .set({ [SC_TITLE_FILTER_KEY]: scTitleFilter })
+      .then(() => {
+        broadcastToSoundcloudTabs({
+          type: "SC_TITLE_FILTER_CHANGED",
+          scTitleFilter
+        });
+        sendResponse({ ok: true, scTitleFilter });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
   if (message.type === "BG_SET_FLAGS") {
     const patch = {};
     if ("hideDownloaded" in message) {
@@ -263,11 +311,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
       }
       broadcastToSoundeoTabs(payload);
     }
+
+    if (changes[SC_TITLE_FILTER_KEY]) {
+      broadcastToSoundcloudTabs({
+        type: "SC_TITLE_FILTER_CHANGED",
+        scTitleFilter: sanitizeTitleFilter(changes[SC_TITLE_FILTER_KEY].newValue)
+      });
+    }
   }
 
   if (area === "local") {
     if (changes[PLAYBACK_RATE_KEY]) {
-      broadcastToSoundeoTabs({
+      broadcastToAllPlatformTabs({
         type: "RATE_CHANGED",
         playbackRate: clampRate(changes[PLAYBACK_RATE_KEY].newValue)
       });

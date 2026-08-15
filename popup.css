@@ -39,6 +39,87 @@ body {
   line-height: 1.4;
 }
 
+body[data-platform="soundcloud"],
+body[data-platform="idle"] {
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  overflow: auto;
+}
+
+.view[hidden] {
+  display: none !important;
+}
+
+#view-soundeo:not([hidden]),
+#view-soundcloud:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+}
+
+#view-soundeo:not([hidden]) {
+  overflow: hidden;
+}
+
+#view-soundeo .section.grow {
+  min-height: 0;
+}
+
+.platform-pill {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.platform-pill.platform-soundeo {
+  color: var(--accent);
+  border-color: rgba(255, 106, 61, 0.45);
+  background: var(--accent-soft);
+}
+
+.platform-pill.platform-soundcloud {
+  color: #ff8a66;
+  border-color: rgba(255, 85, 0, 0.45);
+  background: rgba(255, 85, 0, 0.14);
+}
+
+.idle-copy {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.idle-copy strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.idle-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sc-filter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sc-filter-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .header {
   display: flex;
   flex-direction: column;
@@ -124,6 +205,7 @@ body {
 .random-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 

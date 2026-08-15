@@ -213,10 +213,13 @@ html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
 #soundeo-digger-tempo .sd-overlay-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-top: 2px;
 }
 
-#soundeo-digger-tempo .sd-random-week-btn {
+#soundeo-digger-tempo .sd-random-week-btn,
+#soundeo-digger-tempo .sd-random-month-btn {
   border: 1px solid #3a4554;
   border-radius: 999px;
   background: rgba(255, 106, 61, 0.14);
@@ -228,7 +231,8 @@ html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-#soundeo-digger-tempo .sd-random-week-btn:hover {
+#soundeo-digger-tempo .sd-random-week-btn:hover,
+#soundeo-digger-tempo .sd-random-month-btn:hover {
   background: rgba(255, 106, 61, 0.24);
   border-color: rgba(255, 106, 61, 0.55);
   color: #ffb199;

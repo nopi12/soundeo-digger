@@ -4,7 +4,8 @@ const STORAGE_KEYS = {
   hideListened: "hideListened",
   randomYears: "randomYears",
   blockedArtists: "blockedArtists",
-  favoriteArtists: "favoriteArtists"
+  favoriteArtists: "favoriteArtists",
+  scTitleFilter: "scTitleFilter"
 };
 
 const BASE_PARAMS = {
@@ -35,6 +36,25 @@ function sanitizeArtistList(list) {
     out.push(name);
   }
   return out;
+}
+
+function sanitizeTitleFilter(value) {
+  return String(value || "").trim().slice(0, 120);
+}
+
+function clampRate(rate) {
+  const n = Number(rate);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1.2, Math.max(0.8, n));
+}
+
+function rateToOffset(rate) {
+  return Math.round((clampRate(rate) - 1) * 100);
+}
+
+function formatOffset(offset) {
+  if (offset > 0) return `+${offset}%`;
+  return `${offset}%`;
 }
 
 function pad(n) {
@@ -71,6 +91,32 @@ function weekRangeFromMonday(monday) {
   return { start, end, filter: `r_${formatDate(start)}_${formatDate(end)}` };
 }
 
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date, months) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function monthRangeFromStart(start) {
+  const monthStart = startOfMonth(start);
+  const end = addMonths(monthStart, 1);
+  return { start: monthStart, end, filter: `r_${formatDate(monthStart)}_${formatDate(end)}` };
+}
+
+function pickRandomMonthFilter(years) {
+  const span = Math.max(1, Math.min(20, Number(years) || 3));
+  const thisMonth = startOfMonth(new Date());
+  const earliest = addMonths(thisMonth, -span * 12);
+  const maxOffsetMonths =
+    (thisMonth.getFullYear() - earliest.getFullYear()) * 12 +
+    (thisMonth.getMonth() - earliest.getMonth());
+  const offset = Math.floor(Math.random() * (maxOffsetMonths + 1));
+  const randomMonthStart = addMonths(earliest, offset);
+  return monthRangeFromStart(randomMonthStart).filter;
+}
+
 function parseTimeFilter(timeFilter) {
   if (!timeFilter || timeFilter === "7" || timeFilter === "0") {
     return weekRangeFromMonday(new Date());
@@ -101,6 +147,17 @@ function buildTop100Url({ genreId = "", timeFilter = "7" } = {}) {
     timeFilter
   });
   return `https://soundeo.com/top100?${params.toString()}`;
+}
+
+function detectPlatform(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host === "soundeo.com" || host.endsWith(".soundeo.com")) return "soundeo";
+    if (host === "soundcloud.com" || host.endsWith(".soundcloud.com")) return "soundcloud";
+  } catch {
+    // ignore
+  }
+  return "idle";
 }
 
 function getStorage(keys) {
@@ -141,6 +198,30 @@ async function navigateTo(url) {
 
 function $(id) {
   return document.getElementById(id);
+}
+
+function showView(platform) {
+  const idle = $("view-idle");
+  const soundeo = $("view-soundeo");
+  const soundcloud = $("view-soundcloud");
+  const pill = $("platform-pill");
+  const body = document.body;
+
+  idle.hidden = platform !== "idle";
+  soundeo.hidden = platform !== "soundeo";
+  soundcloud.hidden = platform !== "soundcloud";
+
+  body.dataset.platform = platform;
+  if (platform === "soundeo") {
+    pill.textContent = "Soundeo";
+    pill.className = "platform-pill platform-soundeo";
+  } else if (platform === "soundcloud") {
+    pill.textContent = "SoundCloud";
+    pill.className = "platform-pill platform-soundcloud";
+  } else {
+    pill.textContent = "—";
+    pill.className = "platform-pill";
+  }
 }
 
 function createFavoriteChip(genre, { isActive, onSelect, onToggleFav }) {
@@ -193,8 +274,105 @@ function createGenreItem(genre, { isFavorite, isActive, onSelect, onToggleFav })
   return row;
 }
 
-async function init() {
-  const tab = await getActiveTab();
+async function initSoundcloud(tab) {
+  $("current-context").textContent = "Stream / Listen filtern";
+
+  const stored = await getStorage([STORAGE_KEYS.scTitleFilter]);
+  let titleFilter = sanitizeTitleFilter(stored[STORAGE_KEYS.scTitleFilter]);
+  const local = await chrome.storage.local.get(["playbackRate"]);
+  let playbackRate = clampRate(local.playbackRate);
+
+  const filterInput = $("sc-title-filter");
+  const filterBadge = $("sc-filter-badge");
+  const clearBtn = $("btn-sc-filter-clear");
+  const rateSlider = $("sc-rate-slider");
+  const rateLabel = $("sc-rate-label");
+  const rateReset = $("btn-sc-rate-reset");
+
+  function updateFilterUi(value) {
+    titleFilter = sanitizeTitleFilter(value);
+    if (filterInput.value !== titleFilter) filterInput.value = titleFilter;
+    filterBadge.textContent = titleFilter ? "aktiv" : "aus";
+  }
+
+  function updateRateUi(rate) {
+    playbackRate = clampRate(rate);
+    const offset = rateToOffset(playbackRate);
+    rateSlider.value = String(offset);
+    rateLabel.textContent = formatOffset(offset);
+  }
+
+  updateFilterUi(titleFilter);
+  updateRateUi(playbackRate);
+
+  async function notifyTab(type, value) {
+    if (!tab?.id) return;
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type, value });
+    } catch {
+      // Tab may not have content script yet
+    }
+  }
+
+  async function persistFilter(next) {
+    updateFilterUi(next);
+    // Direct storage write + BG broadcast + tab ping (belt & suspenders)
+    await chrome.storage.sync.set({ [STORAGE_KEYS.scTitleFilter]: titleFilter });
+    try {
+      await chrome.runtime.sendMessage({
+        type: "BG_SET_SC_TITLE_FILTER",
+        scTitleFilter: titleFilter
+      });
+    } catch {
+      // ignore
+    }
+    await notifyTab("SET_SC_TITLE_FILTER", titleFilter);
+    await notifyTab("SC_TITLE_FILTER_CHANGED", titleFilter);
+    // Also send payload shape content script expects for SC_TITLE_FILTER_CHANGED
+    if (tab?.id) {
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: "SC_TITLE_FILTER_CHANGED",
+          scTitleFilter: titleFilter
+        });
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  let filterTimer = null;
+  filterInput.addEventListener("input", () => {
+    updateFilterUi(filterInput.value);
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => {
+      persistFilter(filterInput.value);
+    }, 120);
+  });
+
+  clearBtn.addEventListener("click", async () => {
+    await persistFilter("");
+  });
+
+  rateSlider.addEventListener("input", async () => {
+    const offset = Number(rateSlider.value) || 0;
+    updateRateUi(1 + offset / 100);
+    await chrome.runtime.sendMessage({
+      type: "BG_SET_PLAYBACK_RATE",
+      playbackRate
+    });
+  });
+
+  rateReset.addEventListener("click", async () => {
+    updateRateUi(1);
+    await chrome.runtime.sendMessage({
+      type: "BG_SET_PLAYBACK_RATE",
+      playbackRate: 1
+    });
+  });
+}
+
+async function initSoundeo(tab) {
   const state = parseSoundeoState(tab?.url || "");
   const stored = await getStorage([
     STORAGE_KEYS.favorites,
@@ -221,6 +399,7 @@ async function init() {
     thisWeek: $("btn-this-week"),
     nextWeek: $("btn-next-week"),
     randomWeek: $("btn-random-week"),
+    randomMonth: $("btn-random-month"),
     randomYears: $("random-years"),
     hideDownloaded: $("hide-downloaded"),
     hideListened: $("hide-listened"),
@@ -454,7 +633,6 @@ async function init() {
   els.nextWeek.addEventListener("click", () => {
     const next = weekRangeFromMonday(addDays(currentWeek.start, 7));
     const thisWeek = weekRangeFromMonday(new Date());
-    // Don't go into the future past current week
     if (next.start > thisWeek.start) {
       goWith({ timeFilter: "7" });
       return;
@@ -483,12 +661,16 @@ async function init() {
     const randomMonday = addDays(earliestMonday, offset * 7);
     const week = weekRangeFromMonday(randomMonday);
 
-    // Prefer "7" if we landed on current week
     if (formatDate(week.start) === formatDate(thisWeek.start)) {
       goWith({ timeFilter: "7" });
     } else {
       goWith({ timeFilter: week.filter });
     }
+  });
+
+  els.randomMonth.addEventListener("click", () => {
+    const years = Math.max(1, Math.min(20, Number(els.randomYears.value) || 3));
+    goWith({ timeFilter: pickRandomMonthFilter(years) });
   });
 
   els.randomYears.addEventListener("change", async () => {
@@ -556,6 +738,32 @@ async function init() {
   renderArtistLists();
   renderFavorites();
   renderGenres();
+}
+
+async function initIdle() {
+  $("current-context").textContent = "Öffne Soundeo oder SoundCloud";
+  $("btn-open-soundeo").addEventListener("click", () => {
+    navigateTo("https://soundeo.com/top100");
+  });
+  $("btn-open-soundcloud").addEventListener("click", () => {
+    navigateTo("https://soundcloud.com/discover");
+  });
+}
+
+async function init() {
+  const tab = await getActiveTab();
+  const platform = detectPlatform(tab?.url || "");
+  showView(platform);
+
+  if (platform === "soundeo") {
+    await initSoundeo(tab);
+    return;
+  }
+  if (platform === "soundcloud") {
+    await initSoundcloud(tab);
+    return;
+  }
+  await initIdle();
 }
 
 init();

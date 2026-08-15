@@ -1,11 +1,15 @@
 (() => {
-  if (window.__soundeoDiggerRateHook) return;
-  window.__soundeoDiggerRateHook = true;
+  if (window.__diggerRateHook) return;
+  window.__diggerRateHook = true;
 
-  const ATTR = "data-soundeo-digger-rate";
+  const ATTR = "data-digger-rate";
+  const LEGACY_ATTR = "data-soundeo-digger-rate";
 
   function readRate() {
-    const n = Number(document.documentElement.getAttribute(ATTR));
+    const raw =
+      document.documentElement.getAttribute(ATTR) ||
+      document.documentElement.getAttribute(LEGACY_ATTR);
+    const n = Number(raw);
     if (!Number.isFinite(n)) return 1;
     return Math.min(1.2, Math.max(0.8, n));
   }
@@ -44,13 +48,16 @@
 
   new MutationObserver((mutations) => {
     for (const m of mutations) {
-      if (m.type === "attributes" && m.attributeName === ATTR) {
+      if (
+        m.type === "attributes" &&
+        (m.attributeName === ATTR || m.attributeName === LEGACY_ATTR)
+      ) {
         applyAll();
         return;
       }
     }
   }).observe(document.documentElement, {
     attributes: true,
-    attributeFilter: [ATTR]
+    attributeFilter: [ATTR, LEGACY_ATTR]
   });
 })();

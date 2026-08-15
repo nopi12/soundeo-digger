@@ -3,10 +3,10 @@ const HIDDEN_LISTENED = "soundeo-digger-hidden-listened";
 const HIDDEN_BLOCKED = "soundeo-digger-hidden-blocked";
 const PLAYED_ATTR = "data-soundeo-digger-played";
 const FAV_ARTIST_ATTR = "data-soundeo-digger-fav-artist";
-const RATE_ATTR = "data-soundeo-digger-rate";
+const RATE_ATTR = "data-digger-rate";
 const HIDE_GRACE_MS = 10000;
 const SKIP_SECONDS = 30;
-const EXT_VERSION = "1.5.8";
+const EXT_VERSION = "1.6.0";
 const RATE_MIN = 0.8;
 const RATE_MAX = 1.2;
 const DEFAULT_TARGET_BPM = 120;
@@ -496,6 +496,24 @@ function weekRangeFromMonday(monday) {
   };
 }
 
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date, months) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function monthRangeFromStart(start) {
+  const monthStart = startOfMonth(start);
+  const end = addMonths(monthStart, 1);
+  return {
+    start: monthStart,
+    end: end,
+    filter: "r_" + formatDateYmd(monthStart) + "_" + formatDateYmd(end)
+  };
+}
+
 function pickRandomWeekFilter(years) {
   const span = Math.max(1, Math.min(20, Number(years) || 3));
   const thisWeek = weekRangeFromMonday(new Date());
@@ -509,6 +527,18 @@ function pickRandomWeekFilter(years) {
   const week = weekRangeFromMonday(randomMonday);
   if (formatDateYmd(week.start) === formatDateYmd(thisWeek.start)) return "7";
   return week.filter;
+}
+
+function pickRandomMonthFilter(years) {
+  const span = Math.max(1, Math.min(20, Number(years) || 3));
+  const thisMonth = startOfMonth(new Date());
+  const earliest = addMonths(thisMonth, -span * 12);
+  const maxOffsetMonths =
+    (thisMonth.getFullYear() - earliest.getFullYear()) * 12 +
+    (thisMonth.getMonth() - earliest.getMonth());
+  const offset = Math.floor(Math.random() * (maxOffsetMonths + 1));
+  const randomMonthStart = addMonths(earliest, offset);
+  return monthRangeFromStart(randomMonthStart).filter;
 }
 
 function buildTop100UrlWithTimeFilter(timeFilter) {
@@ -537,6 +567,14 @@ function goRandomWeek() {
   window.location.assign(url);
 }
 
+function goRandomMonth() {
+  if (dead) return;
+  const timeFilter = pickRandomMonthFilter(state.randomYears);
+  const url = buildTop100UrlWithTimeFilter(timeFilter);
+  if (tempoUi && tempoUi.meta) tempoUi.meta.textContent = "Random Month…";
+  window.location.assign(url);
+}
+
 function wireOverlayIsolation(root) {
   if (!root || root.dataset.overlayIso === "1") return;
   root.dataset.overlayIso = "1";
@@ -562,7 +600,8 @@ function injectTempoWidget() {
       slider: root.querySelector(".sd-tempo-slider"),
       label: root.querySelector(".sd-tempo-value"),
       meta: root.querySelector(".sd-tempo-meta"),
-      randomWeek: root.querySelector(".sd-random-week-btn")
+      randomWeek: root.querySelector(".sd-random-week-btn"),
+      randomMonth: root.querySelector(".sd-random-month-btn")
     };
     wireOverlayIsolation(root);
     updateTempoUi();
@@ -613,14 +652,32 @@ function injectTempoWidget() {
     goRandomWeek();
   });
 
+  const randomMonthBtn = document.createElement("button");
+  randomMonthBtn.type = "button";
+  randomMonthBtn.className = "sd-random-month-btn";
+  randomMonthBtn.textContent = "Random Month";
+  randomMonthBtn.title = "Zufälliger Monat (Jahre im Popup einstellbar)";
+  randomMonthBtn.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    goRandomMonth();
+  });
+
   actions.appendChild(randomBtn);
+  actions.appendChild(randomMonthBtn);
   root.appendChild(row);
   root.appendChild(meta);
   root.appendChild(actions);
   document.body.appendChild(root);
 
   root.dataset.wired = "overlay2";
-  tempoUi = { slider: slider, label: label, meta: meta, randomWeek: randomBtn };
+  tempoUi = {
+    slider: slider,
+    label: label,
+    meta: meta,
+    randomWeek: randomBtn,
+    randomMonth: randomMonthBtn
+  };
 
   slider.addEventListener("input", function () {
     setTargetBpm(slider.value, true);
@@ -1064,7 +1121,7 @@ async function loadState() {
   applyRateAll();
   injectTempoWidget();
   applyTargetIfPossible(false);
-  console.info("[Soundeo Digger] content script ready · v" + EXT_VERSION);
+  console.info("[Digger] Soundeo ready · v" + EXT_VERSION);
 }
 
 try {
@@ -1142,11 +1199,18 @@ document.addEventListener("click", onManualToggle, true);
 document.addEventListener("click", onArtistGesture, true);
 document.addEventListener("click", function (e) {
   if (dead) return;
-  const btn = e.target.closest(".sd-random-week-btn");
-  if (!btn) return;
+  const weekBtn = e.target.closest(".sd-random-week-btn");
+  if (weekBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    goRandomWeek();
+    return;
+  }
+  const monthBtn = e.target.closest(".sd-random-month-btn");
+  if (!monthBtn) return;
   e.preventDefault();
   e.stopPropagation();
-  goRandomWeek();
+  goRandomMonth();
 }, true);
 document.addEventListener("play", function (e) {
   applyRateToEl(e.target);
