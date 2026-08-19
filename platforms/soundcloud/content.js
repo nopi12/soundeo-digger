@@ -2,13 +2,21 @@ const RATE_ATTR = "data-digger-rate";
 const HIDDEN_CLASS = "digger-sc-hidden-title";
 const MARK_ATTR = "data-digger-sc-item";
 const BAR_ID = "digger-sc-feed-bar";
+const PANEL_ID = "digger-sc-side-panel";
+const SC_DURATION_EVENT = "digger:sc-duration-data";
 const EXT_VERSION = "1.6.3";
 const RATE_MIN = 0.8;
 const RATE_MAX = 1.2;
+const SET_MAX_SECONDS = 20 * 60;
+const DURATION_ATTR = "data-digger-sc-duration";
+const FREE_DOWNLOAD_RE = /\b(?:free\s*download|free\s*dl|edit)\b/i;
 
 const state = {
   playbackRate: 1,
-  titleFilter: ""
+  titleFilter: "",
+  hideSets: false,
+  hideTracks: false,
+  hideFreeDownloads: false
 };
 
 let dead = false;
@@ -16,15 +24,23 @@ let scheduled = false;
 let applying = false;
 let rateSaveTimer = null;
 let filterSaveTimer = null;
+let hideSetsSaveTimer = null;
+let hideTracksSaveTimer = null;
+let hideFreeDownloadsSaveTimer = null;
 let trackObserver = null;
 let barUi = null;
+let panelUi = null;
 let lastPath = "";
+const durationByUrl = new Map();
 
 function retire() {
   if (dead) return;
   dead = true;
   clearTimeout(rateSaveTimer);
   clearTimeout(filterSaveTimer);
+  clearTimeout(hideSetsSaveTimer);
+  clearTimeout(hideTracksSaveTimer);
+  clearTimeout(hideFreeDownloadsSaveTimer);
   if (trackObserver) {
     try {
       trackObserver.disconnect();
@@ -74,6 +90,10 @@ function clampRate(rate) {
 
 function sanitizeTitleFilter(value) {
   return String(value || "").trim().slice(0, 120);
+}
+
+function isFeedPage() {
+  return /^\/feed(?:[/?#]|$)/.test(location.pathname);
 }
 
 function rateToOffset(rate) {
@@ -129,6 +149,48 @@ function setTitleFilter(value, persist) {
     sendToBackground({
       type: "BG_SET_SC_TITLE_FILTER",
       scTitleFilter: state.titleFilter
+    });
+  }, 150);
+}
+
+function setHideSets(value, persist) {
+  state.hideSets = Boolean(value);
+  applyFilters();
+  updateBarUi();
+  if (!persist || dead) return;
+  clearTimeout(hideSetsSaveTimer);
+  hideSetsSaveTimer = setTimeout(function () {
+    sendToBackground({
+      type: "BG_SET_SC_HIDE_SETS",
+      scHideSets: state.hideSets
+    });
+  }, 150);
+}
+
+function setHideTracks(value, persist) {
+  state.hideTracks = Boolean(value);
+  applyFilters();
+  updateBarUi();
+  if (!persist || dead) return;
+  clearTimeout(hideTracksSaveTimer);
+  hideTracksSaveTimer = setTimeout(function () {
+    sendToBackground({
+      type: "BG_SET_SC_HIDE_TRACKS",
+      scHideTracks: state.hideTracks
+    });
+  }, 150);
+}
+
+function setHideFreeDownloads(value, persist) {
+  state.hideFreeDownloads = Boolean(value);
+  applyFilters();
+  updateBarUi();
+  if (!persist || dead) return;
+  clearTimeout(hideFreeDownloadsSaveTimer);
+  hideFreeDownloadsSaveTimer = setTimeout(function () {
+    sendToBackground({
+      type: "BG_SET_SC_HIDE_FREE_DOWNLOADS",
+      scHideFreeDownloads: state.hideFreeDownloads
     });
   }, 150);
 }
@@ -218,6 +280,175 @@ function titleMatches(title, filter) {
     .includes(q);
 }
 
+function parseVerboseDurationToSeconds(text) {
+  const value = String(text || "").toLowerCase();
+  if (!value) return null;
+  let seconds = 0;
+  const hourMatch = value.match(/(\d+)\s*(?:stunde|stunden|hour|hours)/i);
+  const minuteMatch = value.match(/(\d+)\s*(?:minute|minuten|minute|minutes)/i);
+  const secondMatch = value.match(/(\d+)\s*(?:sekunde|sekunden|second|seconds)/i);
+  if (hourMatch) seconds += Number(hourMatch[1]) * 3600;
+  if (minuteMatch) seconds += Number(minuteMatch[1]) * 60;
+  if (secondMatch) seconds += Number(secondMatch[1]);
+  return seconds > 0 ? seconds : null;
+}
+
+function parseClockDurationToSeconds(text) {
+  const match = String(text || "")
+    .trim()
+    .match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
+  if (!match) return null;
+  const a = Number(match[1]);
+  const b = Number(match[2]);
+  const c = match[3] != null ? Number(match[3]) : null;
+  if (c == null) return a * 60 + b;
+  return a * 3600 + b * 60 + c;
+}
+
+function parseDurationToSeconds(text) {
+  return parseVerboseDurationToSeconds(text) || parseClockDurationToSeconds(text) || null;
+}
+
+function normalizeTrackUrl(url) {
+  try {
+    const parsed = new URL(url, location.origin);
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return path || "/";
+  } catch (_) {
+    return null;
+  }
+}
+
+function getTrackUrl(item) {
+  if (!item) return null;
+  const link =
+    item.querySelector("a.soundTitle__title") ||
+    item.querySelector(".soundTitle__title") ||
+    item.querySelector('a[href^="/"]');
+  if (!link) return null;
+  try {
+    return normalizeTrackUrl(new URL(link.getAttribute("href"), location.origin).href);
+  } catch (_) {
+    return normalizeTrackUrl(link.href || null);
+  }
+}
+
+function readDurationSeconds(item) {
+  if (!item) return null;
+  const cached = Number(item.getAttribute(DURATION_ATTR));
+  if (Number.isFinite(cached) && cached > 0) return cached;
+
+  const url = getTrackUrl(item);
+  if (url) {
+    const mapped = durationByUrl.get(url);
+    if (Number.isFinite(mapped) && mapped > 0) {
+      item.setAttribute(DURATION_ATTR, String(mapped));
+      return mapped;
+    }
+  }
+
+  const selectors = [
+    '[aria-label*="Gesamte Zeit"]',
+    '[aria-label*="Total time"]',
+    ".playbackTimeline__duration span",
+    ".soundBadge__additional",
+    ".soundTitle__additionalContainer"
+  ];
+  for (let i = 0; i < selectors.length; i++) {
+    const nodes = item.querySelectorAll(selectors[i]);
+    for (let j = 0; j < nodes.length; j++) {
+      const node = nodes[j];
+      const fromLabel = parseDurationToSeconds(node.getAttribute("aria-label"));
+      if (fromLabel) {
+        item.setAttribute(DURATION_ATTR, String(fromLabel));
+        return fromLabel;
+      }
+      const fromText = parseDurationToSeconds(node.textContent);
+      if (fromText) {
+        item.setAttribute(DURATION_ATTR, String(fromText));
+        return fromText;
+      }
+    }
+  }
+
+  return null;
+}
+
+function ingestDurationEntries(entries) {
+  if (!Array.isArray(entries) || !entries.length) return;
+  let changed = false;
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (!entry) continue;
+    const url = normalizeTrackUrl(entry.url || entry.permalink_url);
+    const durationMs = Number(entry.durationMs != null ? entry.durationMs : entry.duration);
+    if (!url || !Number.isFinite(durationMs) || durationMs <= 0) continue;
+    const seconds = Math.round(durationMs / 1000);
+    if (!Number.isFinite(seconds) || seconds <= 0) continue;
+    if (durationByUrl.get(url) === seconds) continue;
+    durationByUrl.set(url, seconds);
+    changed = true;
+  }
+  if (changed) scheduleApply();
+}
+
+function collectHydrationEntries(value, out, depth) {
+  if (!value || depth > 6) return;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) collectHydrationEntries(value[i], out, depth + 1);
+    return;
+  }
+  if (typeof value !== "object") return;
+  if (typeof value.permalink_url === "string" && Number.isFinite(Number(value.duration))) {
+    out.push({
+      url: value.permalink_url,
+      durationMs: Number(value.duration)
+    });
+  }
+  const keys = ["data", "collection", "tracks", "track", "playlist", "items", "sounds", "sound"];
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (key in value) collectHydrationEntries(value[key], out, depth + 1);
+  }
+}
+
+function seedDurationsFromScripts() {
+  let scripts;
+  try {
+    scripts = document.querySelectorAll("script");
+  } catch (_) {
+    return;
+  }
+  const entries = [];
+  for (let i = 0; i < scripts.length; i++) {
+    const text = scripts[i].textContent || "";
+    if (!text || text.indexOf("__sc_hydration") === -1) continue;
+    const match = text.match(/window\.__sc_hydration(?:\w+)?\s*=\s*(\[[\s\S]*?\]);/);
+    if (!match || !match[1]) continue;
+    try {
+      const parsed = JSON.parse(match[1]);
+      collectHydrationEntries(parsed, entries, 0);
+    } catch (_) {}
+  }
+  ingestDurationEntries(entries);
+}
+
+function shouldHideSet(item) {
+  if (!state.hideSets && !state.hideTracks) return false;
+  const seconds = readDurationSeconds(item);
+  if (seconds != null) {
+    if (state.hideSets && seconds > SET_MAX_SECONDS) return true;
+    if (state.hideTracks && seconds <= SET_MAX_SECONDS) return true;
+    return false;
+  }
+  return false;
+}
+
+function shouldHideFreeDownload(title) {
+  if (!state.hideFreeDownloads) return false;
+  return FREE_DOWNLOAD_RE.test(String(title || ""));
+}
+
 function setItemHidden(item, hide) {
   item.classList.toggle(HIDDEN_CLASS, hide);
   if (hide) {
@@ -247,9 +478,15 @@ function applyFilters() {
   if (dead) return;
   applying = true;
   try {
+    if (!isFeedPage()) {
+      clearStaleMarks([]);
+      if (barUi && barUi.meta) barUi.meta.textContent = "Nur im Feed aktiv";
+      return;
+    }
     const items = getTrackItems();
     const filter = state.titleFilter;
-    const hasFilter = Boolean(filter);
+    const hasFilter =
+      Boolean(filter) || state.hideSets || state.hideTracks || state.hideFreeDownloads;
     let visible = 0;
 
     clearStaleMarks(items);
@@ -258,7 +495,10 @@ function applyFilters() {
       const item = items[i];
       item.setAttribute(MARK_ATTR, "1");
       const title = getItemTitle(item);
-      const hide = hasFilter && title ? !titleMatches(title, filter) : false;
+      const hideByTitle = state.titleFilter && title ? !titleMatches(title, filter) : false;
+      const hideByDuration = shouldHideSet(item);
+      const hideByFreeDownload = shouldHideFreeDownload(title);
+      const hide = hideByTitle || hideByDuration || hideByFreeDownload;
       setItemHidden(item, hide);
       if (!hide) visible += 1;
     }
@@ -280,6 +520,7 @@ function scheduleApply() {
     scheduled = false;
     if (!dead) {
       ensureFeedBar();
+      ensureSidePanel();
       applyFilters();
     }
   });
@@ -298,15 +539,22 @@ function wireIsolation(root) {
 }
 
 function updateBarUi() {
-  if (!barUi) return;
   const offset = rateToOffset(state.playbackRate);
   try {
-    if (barUi.slider && String(barUi.slider.value) !== String(offset)) {
+    if (barUi && barUi.slider && String(barUi.slider.value) !== String(offset)) {
       barUi.slider.value = String(offset);
     }
-    if (barUi.rateLabel) barUi.rateLabel.textContent = formatOffset(offset);
-    if (barUi.filterInput && barUi.filterInput.value !== state.titleFilter) {
+    if (barUi && barUi.rateLabel) barUi.rateLabel.textContent = formatOffset(offset);
+    if (barUi && barUi.filterInput && barUi.filterInput.value !== state.titleFilter) {
       barUi.filterInput.value = state.titleFilter;
+    }
+    if (panelUi && panelUi.setsCheckbox) panelUi.setsCheckbox.checked = state.hideSets;
+    if (panelUi && panelUi.tracksCheckbox) panelUi.tracksCheckbox.checked = state.hideTracks;
+    if (panelUi && panelUi.freeDownloadsCheckbox) {
+      panelUi.freeDownloadsCheckbox.checked = state.hideFreeDownloads;
+    }
+    if (panelUi && panelUi.scopeHint) {
+      panelUi.scopeHint.textContent = isFeedPage() ? "Nur im Feed aktiv" : "Im Feed verfugbar";
     }
   } catch (_) {}
 }
@@ -354,6 +602,23 @@ function ensureFeedBar() {
   injectFeedBar(mount);
 }
 
+function ensureSidePanel() {
+  if (dead) return;
+  const existing = document.getElementById(PANEL_ID);
+  if (!isFeedPage()) {
+    if (existing) existing.style.display = "none";
+    return;
+  }
+  if (existing) {
+    existing.style.display = "";
+    if (!panelUi || existing.dataset.wired !== "panel1") {
+      bindSidePanel(existing);
+    }
+    return;
+  }
+  injectSidePanel();
+}
+
 function bindBar(root) {
   barUi = {
     filterInput: root.querySelector(".digger-sc-filter-input"),
@@ -362,6 +627,17 @@ function bindBar(root) {
     rateLabel: root.querySelector(".digger-sc-rate-value"),
     resetBtn: root.querySelector(".digger-sc-reset-btn"),
     meta: root.querySelector(".digger-sc-meta")
+  };
+  wireIsolation(root);
+  updateBarUi();
+}
+
+function bindSidePanel(root) {
+  panelUi = {
+    setsCheckbox: root.querySelector(".digger-sc-sets-checkbox"),
+    tracksCheckbox: root.querySelector(".digger-sc-tracks-checkbox"),
+    freeDownloadsCheckbox: root.querySelector(".digger-sc-freedl-checkbox"),
+    scopeHint: root.querySelector(".digger-sc-panel-hint")
   };
   wireIsolation(root);
   updateBarUi();
@@ -504,6 +780,90 @@ function injectFeedBar(mount) {
   console.info("[Digger] feed bar mounted");
 }
 
+function injectSidePanel() {
+  const root = document.createElement("aside");
+  root.id = PANEL_ID;
+  root.dataset.wired = "panel1";
+
+  const title = document.createElement("h3");
+  title.className = "digger-sc-panel-title";
+  title.textContent = "Anzeigen/Ausblenden";
+
+  const toggle = document.createElement("label");
+  toggle.className = "digger-sc-panel-toggle";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.className = "digger-sc-sets-checkbox";
+  checkbox.checked = state.hideSets;
+
+  const toggleText = document.createElement("span");
+  toggleText.className = "digger-sc-panel-toggle-text";
+  toggleText.textContent = "Sets (> 20 min)";
+
+  const tracksToggle = document.createElement("label");
+  tracksToggle.className = "digger-sc-panel-toggle";
+
+  const tracksCheckbox = document.createElement("input");
+  tracksCheckbox.type = "checkbox";
+  tracksCheckbox.className = "digger-sc-tracks-checkbox";
+  tracksCheckbox.checked = state.hideTracks;
+
+  const tracksText = document.createElement("span");
+  tracksText.className = "digger-sc-panel-toggle-text";
+  tracksText.textContent = "Tracks (<= 20 min)";
+
+  const freeDlToggle = document.createElement("label");
+  freeDlToggle.className = "digger-sc-panel-toggle";
+
+  const freeDlCheckbox = document.createElement("input");
+  freeDlCheckbox.type = "checkbox";
+  freeDlCheckbox.className = "digger-sc-freedl-checkbox";
+  freeDlCheckbox.checked = state.hideFreeDownloads;
+
+  const freeDlText = document.createElement("span");
+  freeDlText.className = "digger-sc-panel-toggle-text";
+  freeDlText.textContent = "Free DL / Edit";
+
+  const hint = document.createElement("p");
+  hint.className = "digger-sc-panel-hint";
+  hint.textContent = "Nur im Feed aktiv";
+
+  toggle.appendChild(checkbox);
+  toggle.appendChild(toggleText);
+  tracksToggle.appendChild(tracksCheckbox);
+  tracksToggle.appendChild(tracksText);
+  freeDlToggle.appendChild(freeDlCheckbox);
+  freeDlToggle.appendChild(freeDlText);
+  root.appendChild(title);
+  root.appendChild(toggle);
+  root.appendChild(tracksToggle);
+  root.appendChild(freeDlToggle);
+  root.appendChild(hint);
+
+  document.body.appendChild(root);
+
+  panelUi = {
+    setsCheckbox: checkbox,
+    tracksCheckbox: tracksCheckbox,
+    freeDownloadsCheckbox: freeDlCheckbox,
+    scopeHint: hint
+  };
+
+  checkbox.addEventListener("change", function () {
+    setHideSets(checkbox.checked, true);
+  });
+  tracksCheckbox.addEventListener("change", function () {
+    setHideTracks(tracksCheckbox.checked, true);
+  });
+  freeDlCheckbox.addEventListener("change", function () {
+    setHideFreeDownloads(freeDlCheckbox.checked, true);
+  });
+
+  wireIsolation(root);
+  updateBarUi();
+}
+
 function observeTracks() {
   if (!document.body || dead) return;
   trackObserver = new MutationObserver(function () {
@@ -520,6 +880,7 @@ function watchSpaNavigation() {
     const path = location.pathname + location.search;
     if (path === lastPath) return;
     lastPath = path;
+    seedDurationsFromScripts();
     scheduleApply();
   }, 700);
 }
@@ -532,10 +893,15 @@ async function loadState() {
   if (res && res.ok) {
     state.playbackRate = clampRate(res.playbackRate);
     state.titleFilter = sanitizeTitleFilter(res.scTitleFilter);
+    state.hideSets = Boolean(res.scHideSets);
+    state.hideTracks = Boolean(res.scHideTracks);
+    state.hideFreeDownloads = Boolean(res.scHideFreeDownloads);
   }
 
+  seedDurationsFromScripts();
   applyRateAll();
   ensureFeedBar();
+  ensureSidePanel();
   applyFilters();
 
   const items = getTrackItems();
@@ -579,6 +945,22 @@ try {
         "scTitleFilter" in message ? message.scTitleFilter : message.value;
       setTitleFilter(next, false);
     }
+    if (message.type === "SC_HIDE_SETS_CHANGED" || message.type === "SET_SC_HIDE_SETS") {
+      const next = "scHideSets" in message ? message.scHideSets : message.value;
+      setHideSets(next, false);
+    }
+    if (message.type === "SC_HIDE_TRACKS_CHANGED" || message.type === "SET_SC_HIDE_TRACKS") {
+      const next = "scHideTracks" in message ? message.scHideTracks : message.value;
+      setHideTracks(next, false);
+    }
+    if (
+      message.type === "SC_HIDE_FREE_DOWNLOADS_CHANGED" ||
+      message.type === "SET_SC_HIDE_FREE_DOWNLOADS"
+    ) {
+      const next =
+        "scHideFreeDownloads" in message ? message.scHideFreeDownloads : message.value;
+      setHideFreeDownloads(next, false);
+    }
   });
 } catch (_) {
   retire();
@@ -590,6 +972,15 @@ try {
     if (dead) return;
     if (area === "sync" && changes.scTitleFilter) {
       setTitleFilter(changes.scTitleFilter.newValue || "", false);
+    }
+    if (area === "sync" && changes.scHideSets) {
+      setHideSets(Boolean(changes.scHideSets.newValue), false);
+    }
+    if (area === "sync" && changes.scHideTracks) {
+      setHideTracks(Boolean(changes.scHideTracks.newValue), false);
+    }
+    if (area === "sync" && changes.scHideFreeDownloads) {
+      setHideFreeDownloads(Boolean(changes.scHideFreeDownloads.newValue), false);
     }
     if (area === "local" && changes.playbackRate) {
       setPlaybackRate(changes.playbackRate.newValue, false);
@@ -604,6 +995,11 @@ document.addEventListener(
   },
   true
 );
+
+window.addEventListener(SC_DURATION_EVENT, function (e) {
+  if (!e || !e.detail) return;
+  ingestDurationEntries(e.detail.tracks);
+});
 
 function boot() {
   loadState();

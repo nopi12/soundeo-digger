@@ -7,6 +7,9 @@ const BPM_CACHE_KEY = "bpmCache";
 const BLOCKED_ARTISTS_KEY = "blockedArtists";
 const FAVORITE_ARTISTS_KEY = "favoriteArtists";
 const SC_TITLE_FILTER_KEY = "scTitleFilter";
+const SC_HIDE_SETS_KEY = "scHideSets";
+const SC_HIDE_TRACKS_KEY = "scHideTracks";
+const SC_HIDE_FREE_DOWNLOADS_KEY = "scHideFreeDownloads";
 const DEFAULT_TARGET_BPM = 120;
 const BPM_SLIDER_MIN = 80;
 const BPM_SLIDER_MAX = 160;
@@ -149,7 +152,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         "hideDownloaded",
         "hideListened",
         "randomYears",
-        SC_TITLE_FILTER_KEY
+        SC_TITLE_FILTER_KEY,
+        SC_HIDE_SETS_KEY,
+        SC_HIDE_TRACKS_KEY,
+        SC_HIDE_FREE_DOWNLOADS_KEY
       ]),
       getPlayed(),
       getPlaybackRate(),
@@ -169,7 +175,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           blockedArtists: artists.blockedArtists,
           favoriteArtists: artists.favoriteArtists,
           randomYears: Math.max(1, Math.min(20, Number(sync.randomYears) || 3)),
-          scTitleFilter: sanitizeTitleFilter(sync[SC_TITLE_FILTER_KEY])
+          scTitleFilter: sanitizeTitleFilter(sync[SC_TITLE_FILTER_KEY]),
+          scHideSets: Boolean(sync[SC_HIDE_SETS_KEY]),
+          scHideTracks: Boolean(sync[SC_HIDE_TRACKS_KEY]),
+          scHideFreeDownloads: Boolean(sync[SC_HIDE_FREE_DOWNLOADS_KEY])
         });
       })
       .catch((err) => {
@@ -268,6 +277,51 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "BG_SET_SC_HIDE_SETS") {
+    const scHideSets = Boolean(message.scHideSets);
+    chrome.storage.sync
+      .set({ [SC_HIDE_SETS_KEY]: scHideSets })
+      .then(() => {
+        broadcastToSoundcloudTabs({
+          type: "SC_HIDE_SETS_CHANGED",
+          scHideSets
+        });
+        sendResponse({ ok: true, scHideSets });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_SET_SC_HIDE_TRACKS") {
+    const scHideTracks = Boolean(message.scHideTracks);
+    chrome.storage.sync
+      .set({ [SC_HIDE_TRACKS_KEY]: scHideTracks })
+      .then(() => {
+        broadcastToSoundcloudTabs({
+          type: "SC_HIDE_TRACKS_CHANGED",
+          scHideTracks
+        });
+        sendResponse({ ok: true, scHideTracks });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_SET_SC_HIDE_FREE_DOWNLOADS") {
+    const scHideFreeDownloads = Boolean(message.scHideFreeDownloads);
+    chrome.storage.sync
+      .set({ [SC_HIDE_FREE_DOWNLOADS_KEY]: scHideFreeDownloads })
+      .then(() => {
+        broadcastToSoundcloudTabs({
+          type: "SC_HIDE_FREE_DOWNLOADS_CHANGED",
+          scHideFreeDownloads
+        });
+        sendResponse({ ok: true, scHideFreeDownloads });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
   if (message.type === "BG_SET_FLAGS") {
     const patch = {};
     if ("hideDownloaded" in message) {
@@ -316,6 +370,27 @@ chrome.storage.onChanged.addListener((changes, area) => {
       broadcastToSoundcloudTabs({
         type: "SC_TITLE_FILTER_CHANGED",
         scTitleFilter: sanitizeTitleFilter(changes[SC_TITLE_FILTER_KEY].newValue)
+      });
+    }
+
+    if (changes[SC_HIDE_SETS_KEY]) {
+      broadcastToSoundcloudTabs({
+        type: "SC_HIDE_SETS_CHANGED",
+        scHideSets: Boolean(changes[SC_HIDE_SETS_KEY].newValue)
+      });
+    }
+
+    if (changes[SC_HIDE_TRACKS_KEY]) {
+      broadcastToSoundcloudTabs({
+        type: "SC_HIDE_TRACKS_CHANGED",
+        scHideTracks: Boolean(changes[SC_HIDE_TRACKS_KEY].newValue)
+      });
+    }
+
+    if (changes[SC_HIDE_FREE_DOWNLOADS_KEY]) {
+      broadcastToSoundcloudTabs({
+        type: "SC_HIDE_FREE_DOWNLOADS_CHANGED",
+        scHideFreeDownloads: Boolean(changes[SC_HIDE_FREE_DOWNLOADS_KEY].newValue)
       });
     }
   }

@@ -60,4 +60,84 @@
     attributes: true,
     attributeFilter: [ATTR, LEGACY_ATTR]
   });
+
+  if (!/soundcloud\.com$/i.test(location.hostname)) return;
+
+  const SC_EVENT = "digger:sc-duration-data";
+
+  function normalizeUrl(url) {
+    try {
+      const parsed = new URL(url, location.origin);
+      const path = parsed.pathname.replace(/\/+$/, "");
+      return path || "/";
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function collectTrackDurations(value, out, seen, depth) {
+    if (!value || depth > 6) return;
+    if (Array.isArray(value)) {
+      for (const item of value) collectTrackDurations(item, out, seen, depth + 1);
+      return;
+    }
+    if (typeof value !== "object") return;
+
+    if (typeof value.permalink_url === "string" && Number.isFinite(Number(value.duration))) {
+      const url = normalizeUrl(value.permalink_url);
+      const durationMs = Number(value.duration);
+      if (url && durationMs > 0 && !seen.has(url)) {
+        seen.add(url);
+        out.push({ url, durationMs });
+      }
+    }
+
+    const keys = [
+      "data",
+      "collection",
+      "tracks",
+      "track",
+      "playlist",
+      "items",
+      "sounds",
+      "sound"
+    ];
+    for (const key of keys) {
+      if (key in value) collectTrackDurations(value[key], out, seen, depth + 1);
+    }
+  }
+
+  function emitTrackDurations(payload) {
+    const tracks = [];
+    collectTrackDurations(payload, tracks, new Set(), 0);
+    if (!tracks.length) return;
+    window.dispatchEvent(
+      new CustomEvent(SC_EVENT, {
+        detail: { tracks }
+      })
+    );
+  }
+
+  function inspectFetchResponse(url, res) {
+    if (!url || !/soundcloud\.com|sndcdn\.com/i.test(url)) return;
+    const contentType = String(res.headers.get("content-type") || "");
+    if (!/json/i.test(contentType)) return;
+    res
+      .clone()
+      .json()
+      .then(emitTrackDurations)
+      .catch(() => {});
+  }
+
+  try {
+    const origFetch = window.fetch;
+    window.fetch = function (...args) {
+      return origFetch.apply(this, args).then((res) => {
+        try {
+          inspectFetchResponse(res.url || String(args[0] || ""), res);
+        } catch (_) {}
+        return res;
+      });
+    };
+  } catch (_) {}
 })();
