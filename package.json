@@ -1,0 +1,7 @@
+{
+  "name": "digger-extension",
+  "private": true,
+  "scripts": {
+    "lint:lines": "node scripts/check-max-lines.js"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Digger",
-  "version": "1.6.3",
+  "version": "1.13.0",
   "description": "Digging für Soundeo & SoundCloud: Charts, Preview-Tempo, Title-Filter, Artists.",
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": [
@@ -35,7 +35,16 @@
     },
     {
       "matches": ["https://soundeo.com/*"],
-      "js": ["platforms/soundeo/content.js"],
+      "js": [
+        "genres.js",
+        "platforms/soundeo/core.js",
+        "platforms/soundeo/genres.js",
+        "platforms/soundeo/overlay.js",
+        "platforms/soundeo/tracks.js",
+        "platforms/soundeo/artist-tracks.js",
+        "platforms/soundeo/label-tracks.js",
+        "platforms/soundeo/boot.js"
+      ],
       "css": ["platforms/soundeo/content.css"],
       "run_at": "document_idle"
     },
@@ -53,7 +62,16 @@
         "https://soundcloud.com/*",
         "https://*.soundcloud.com/*"
       ],
-      "js": ["platforms/soundcloud/content.js"],
+      "js": [
+        "platforms/soundcloud/perf.js",
+        "platforms/soundcloud/core.js",
+        "platforms/soundcloud/plays.js",
+        "platforms/soundcloud/listened.js",
+        "platforms/soundcloud/autoload.js",
+        "platforms/soundcloud/ui.js",
+        "platforms/soundcloud/debug.js",
+        "platforms/soundcloud/boot.js"
+      ],
       "css": ["platforms/soundcloud/content.css"],
       "run_at": "document_idle"
     }

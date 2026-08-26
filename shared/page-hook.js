@@ -83,12 +83,28 @@
     }
     if (typeof value !== "object") return;
 
-    if (typeof value.permalink_url === "string" && Number.isFinite(Number(value.duration))) {
+    if (typeof value.permalink_url === "string") {
       const url = normalizeUrl(value.permalink_url);
-      const durationMs = Number(value.duration);
-      if (url && durationMs > 0 && !seen.has(url)) {
-        seen.add(url);
-        out.push({ url, durationMs });
+      if (url) {
+        const entry = { url };
+        const durationMs = Number(value.duration);
+        const playbackCount = Number(value.playback_count);
+        if (Number.isFinite(durationMs) && durationMs > 0) entry.durationMs = durationMs;
+        if (Number.isFinite(playbackCount) && playbackCount >= 0) {
+          entry.playbackCount = playbackCount;
+        }
+        if (entry.durationMs || entry.playbackCount != null) {
+          const key =
+            url +
+            "|" +
+            (entry.durationMs || 0) +
+            "|" +
+            (entry.playbackCount != null ? entry.playbackCount : "");
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push(entry);
+          }
+        }
       }
     }
 
@@ -138,6 +154,27 @@
         } catch (_) {}
         return res;
       });
+    };
+  } catch (_) {}
+
+  try {
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+      this.__diggerScUrl = url;
+      return origOpen.call(this, method, url, ...rest);
+    };
+    XMLHttpRequest.prototype.send = function (...args) {
+      this.addEventListener("load", function () {
+        try {
+          const url = this.__diggerScUrl || "";
+          if (!/soundcloud\.com|sndcdn\.com/i.test(url)) return;
+          const type = String(this.getResponseHeader("content-type") || "");
+          if (!/json/i.test(type)) return;
+          emitTrackDurations(JSON.parse(this.responseText));
+        } catch (_) {}
+      });
+      return origSend.apply(this, args);
     };
   } catch (_) {}
 })();

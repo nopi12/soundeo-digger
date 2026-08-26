@@ -55,3 +55,6 @@ const GENRES = [
   { id: "38", name: "Trap / Wave" },
   { id: "86", name: "UK Garage / Bassline" }
 ];
+
+globalThis.ALL_GENRES = ALL_GENRES;
+globalThis.GENRES = GENRES;

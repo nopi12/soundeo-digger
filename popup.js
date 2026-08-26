@@ -1,5 +1,6 @@
 const STORAGE_KEYS = {
   favorites: "favoriteGenres",
+  selectedFavorites: "selectedFavoriteGenres",
   hideDownloaded: "hideDownloaded",
   hideListened: "hideListened",
   randomYears: "randomYears",
@@ -224,6 +225,63 @@ function showView(platform) {
   }
 }
 
+const SOUNDEO_TAB_KEY = "soundeoActiveTab";
+
+function setSoundeoTab(tabId) {
+  const tabs = document.querySelectorAll("#view-soundeo .tab");
+  const panels = document.querySelectorAll("#view-soundeo .tab-panel");
+
+  for (const tab of tabs) {
+    const active = tab.dataset.tab === tabId;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  }
+
+  for (const panel of panels) {
+    const active = panel.dataset.tab === tabId;
+    panel.classList.toggle("active", active);
+    panel.hidden = !active;
+  }
+
+  try {
+    sessionStorage.setItem(SOUNDEO_TAB_KEY, tabId);
+  } catch {
+    // ignore
+  }
+}
+
+function initSoundeoTabs() {
+  const tabBar = document.querySelector("#view-soundeo .tab-bar");
+  if (!tabBar || tabBar.dataset.wired) return;
+  tabBar.dataset.wired = "1";
+
+  let initial = "browse";
+  try {
+    const saved = sessionStorage.getItem(SOUNDEO_TAB_KEY);
+    if (saved && tabBar.querySelector(`[data-tab="${saved}"]`)) {
+      initial = saved;
+    }
+  } catch {
+    // ignore
+  }
+
+  setSoundeoTab(initial);
+
+  tabBar.addEventListener("click", (e) => {
+    const tab = e.target.closest(".tab");
+    if (!tab?.dataset.tab) return;
+    setSoundeoTab(tab.dataset.tab);
+  });
+}
+
+function updateFilterTabBadge(favCount, blockCount) {
+  const badge = $("filter-tab-badge");
+  if (!badge) return;
+  const total = favCount + blockCount;
+  badge.textContent = String(total);
+  badge.hidden = total === 0;
+}
+
 function createFavoriteChip(genre, { isActive, onSelect, onToggleFav }) {
   const chip = document.createElement("div");
   chip.className = `fav-chip${isActive ? " active" : ""}`;
@@ -277,8 +335,12 @@ function createGenreItem(genre, { isFavorite, isActive, onSelect, onToggleFav })
 async function initSoundcloud(tab) {
   $("current-context").textContent = "Stream / Listen filtern";
 
-  const stored = await getStorage([STORAGE_KEYS.scTitleFilter]);
+  const stored = await getStorage([
+    STORAGE_KEYS.scTitleFilter,
+    STORAGE_KEYS.hideListened
+  ]);
   let titleFilter = sanitizeTitleFilter(stored[STORAGE_KEYS.scTitleFilter]);
+  let hideListened = Boolean(stored[STORAGE_KEYS.hideListened]);
   const local = await chrome.storage.local.get(["playbackRate"]);
   let playbackRate = clampRate(local.playbackRate);
 
@@ -288,6 +350,9 @@ async function initSoundcloud(tab) {
   const rateSlider = $("sc-rate-slider");
   const rateLabel = $("sc-rate-label");
   const rateReset = $("btn-sc-rate-reset");
+  const hideListenedInput = $("sc-hide-listened");
+  const playedCount = $("sc-played-count");
+  const clearPlayedBtn = $("btn-sc-clear-played");
 
   function updateFilterUi(value) {
     titleFilter = sanitizeTitleFilter(value);
@@ -304,6 +369,13 @@ async function initSoundcloud(tab) {
 
   updateFilterUi(titleFilter);
   updateRateUi(playbackRate);
+  hideListenedInput.checked = hideListened;
+
+  async function refreshPlayedCount() {
+    const localPlayed = await chrome.storage.local.get(["playedTracks"]);
+    const count = Object.keys(localPlayed.playedTracks || {}).length;
+    playedCount.textContent = `${count} Play${count === 1 ? "" : "s"} gespeichert`;
+  }
 
   async function notifyTab(type, value) {
     if (!tab?.id) return;
@@ -370,6 +442,21 @@ async function initSoundcloud(tab) {
       playbackRate: 1
     });
   });
+
+  hideListenedInput.addEventListener("change", async () => {
+    hideListened = hideListenedInput.checked;
+    await setStorage({ [STORAGE_KEYS.hideListened]: hideListened });
+    await notifyTab("SET_HIDE_LISTENED", hideListened);
+  });
+
+  clearPlayedBtn.addEventListener("click", async () => {
+    if (!confirm("Alle gespeicherten Plays löschen?")) return;
+    await chrome.storage.local.set({ playedTracks: {} });
+    await notifyTab("CLEAR_PLAYED", true);
+    await refreshPlayedCount();
+  });
+
+  await refreshPlayedCount();
 }
 
 async function initSoundeo(tab) {
@@ -403,9 +490,6 @@ async function initSoundeo(tab) {
     randomYears: $("random-years"),
     hideDownloaded: $("hide-downloaded"),
     hideListened: $("hide-listened"),
-    tempoSlider: $("tempo-slider"),
-    tempoLabel: $("tempo-label"),
-    tempoReset: $("btn-tempo-reset"),
     playedCount: $("played-count"),
     clearPlayed: $("btn-clear-played"),
     artistFavList: $("artist-fav-list"),
@@ -425,27 +509,6 @@ async function initSoundeo(tab) {
   els.randomYears.value = String(randomYears);
   els.hideDownloaded.checked = hideDownloaded;
   els.hideListened.checked = hideListened;
-
-  const DEFAULT_TARGET_BPM = 120;
-  const BPM_MIN = 80;
-  const BPM_MAX = 160;
-
-  function normalizeTargetBpm(bpm) {
-    const n = Math.round(Number(bpm));
-    if (!Number.isFinite(n) || n <= 0) return DEFAULT_TARGET_BPM;
-    return Math.min(BPM_MAX, Math.max(BPM_MIN, n));
-  }
-
-  const localTempo = await chrome.storage.local.get(["targetBpm"]);
-  let targetBpm = normalizeTargetBpm(localTempo.targetBpm);
-
-  function updateTempoUi(bpm) {
-    targetBpm = normalizeTargetBpm(bpm);
-    els.tempoSlider.value = String(targetBpm);
-    els.tempoLabel.textContent = String(targetBpm);
-  }
-
-  updateTempoUi(targetBpm);
 
   async function refreshPlayedCount() {
     const local = await chrome.storage.local.get(["playedTracks"]);
@@ -550,6 +613,7 @@ async function initSoundeo(tab) {
       "block",
       "Keine blockierten Artists."
     );
+    updateFilterTabBadge(favoriteArtists.length, blockedArtists.length);
   }
 
   function addArtist(name, kind) {
@@ -615,12 +679,21 @@ async function initSoundeo(tab) {
   }
 
   async function toggleFavorite(id) {
+    const stored = await getStorage([STORAGE_KEYS.selectedFavorites]);
+    let selected = stored[STORAGE_KEYS.selectedFavorites] || [];
+
     if (favorites.includes(id)) {
       favorites = favorites.filter((f) => f !== id);
+      selected = selected.filter((f) => f !== id);
     } else {
       favorites = [...favorites, id];
+      if (!selected.includes(id)) selected = [...selected, id];
     }
-    await setStorage({ [STORAGE_KEYS.favorites]: favorites });
+
+    await setStorage({
+      [STORAGE_KEYS.favorites]: favorites,
+      [STORAGE_KEYS.selectedFavorites]: selected
+    });
     renderFavorites();
     renderGenres(els.search.value);
   }
@@ -705,22 +778,6 @@ async function initSoundeo(tab) {
     await persistArtists();
   });
 
-  els.tempoSlider.addEventListener("input", async () => {
-    updateTempoUi(els.tempoSlider.value);
-    await chrome.runtime.sendMessage({
-      type: "BG_SET_TARGET_BPM",
-      targetBpm
-    });
-  });
-
-  els.tempoReset.addEventListener("click", async () => {
-    updateTempoUi(DEFAULT_TARGET_BPM);
-    await chrome.runtime.sendMessage({
-      type: "BG_SET_TARGET_BPM",
-      targetBpm: DEFAULT_TARGET_BPM
-    });
-  });
-
   els.clearPlayed.addEventListener("click", async () => {
     if (!confirm("Alle selbst getrackten Plays löschen?")) return;
     await chrome.storage.local.set({ playedTracks: {} });
@@ -735,6 +792,7 @@ async function initSoundeo(tab) {
   });
 
   updateContext();
+  initSoundeoTabs();
   renderArtistLists();
   renderFavorites();
   renderGenres();

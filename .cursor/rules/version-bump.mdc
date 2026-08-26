@@ -1,0 +1,28 @@
+---
+description: App-Version bei jeder Code-Änderung erhöhen
+alwaysApply: true
+---
+
+# Version bump (Digger Extension)
+
+Bei **jeder** Code- oder Config-Änderung an der Extension die Version in `manifest.json` erhöhen.
+
+## Regeln
+
+- Quelle der Wahrheit: `"version"` in `manifest.json` (aktuell semver `MAJOR.MINOR.PATCH`).
+- **Patch** (+0.0.1) für Bugfixes, kleine Anpassungen, Refactors ohne Nutzer-sichtbare Änderung.
+- **Minor** (+0.1.0) für neue Features oder spürbare UX-Verbesserungen.
+- **Major** (+1.0.0) nur bei Breaking Changes (z. B. entfernte Features, geänderte Storage-Keys).
+- Version und Code-Änderungen gehören in **dieselbe** Session / denselben Commit — nicht vergessen.
+
+## Beispiel
+
+```json
+"version": "1.6.5"  →  "1.6.6"   // kleiner Fix
+"version": "1.6.5"  →  "1.7.0"   // neues Feature
+```
+
+## Checkliste vor Abschluss
+
+- [ ] `manifest.json` → `"version"` angepasst
+- [ ] Keine zweite Versionsquelle angelegt (nur `manifest.json`)

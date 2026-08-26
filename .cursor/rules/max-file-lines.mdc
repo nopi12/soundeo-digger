@@ -1,0 +1,31 @@
+---
+description: Dateien dürfen max. 1000 Zeilen haben
+alwaysApply: true
+---
+
+# Max. Dateigröße (1000 Zeilen)
+
+Keine Quelldatei im Projekt darf **mehr als 1000 Zeilen** haben.
+
+## Geltungsbereich
+
+- `**/*.js`, `**/*.css`, `**/*.html`
+
+## Bei Überschreitung
+
+Datei aufteilen — z. B. nach Feature/Platform:
+
+```
+platforms/soundeo/content.js   →  features/charts.js, features/filters.js, …
+platforms/soundcloud/content.js → analog
+```
+
+## Prüfung
+
+Vor Commit oder PR:
+
+```bash
+npm run lint:lines
+```
+
+Der Check schlägt fehl, wenn eine Datei > 1000 Zeilen hat.
