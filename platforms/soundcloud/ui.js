@@ -60,7 +60,7 @@ function updateBarUi() {
     }
     syncOverlayLayout();
     updateAutoLoadUi();
-    updateDebugPanel();
+    scheduleDebugPerfRefresh();
   } catch (_) {}
 }
 

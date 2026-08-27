@@ -40,6 +40,7 @@ function applyFilters() {
       );
       item.classList.toggle(HIDDEN_BLOCKED, blocked);
     }
+    collectAndApplySdRatings(items);
   } finally {
     applying = false;
   }
@@ -70,15 +71,29 @@ function persistPlayed() {
 function markPlayed(trackId) {
   if (dead || !trackId) return;
   const id = String(trackId);
-  if (!state.playedIds.has(id)) {
+  if (state.currentTrackId && state.currentTrackId !== id) {
+    if (typeof endSdRatingSession === "function") endSdRatingSession("switch");
+  }
+  const isNew = !state.playedIds.has(id);
+  if (isNew) {
     state.playedIds.add(id);
     persistPlayed();
   }
   state.currentTrackId = id;
+  if (typeof noteSdTrackSession === "function") {
+    noteSdTrackSession(id, findTrackItem(id));
+  }
   applyFilters();
   resolveSourceBpm(id);
   setTimeout(applyRateAll, 40);
   setTimeout(applyRateAll, 250);
+  if (isNew) {
+    const item = findTrackItem(id);
+    sendToBackground({
+      type: "BG_RECORD_PLAY",
+      play: buildSoundeoPlayPayload(item, id)
+    });
+  }
 }
 
 function unmarkPlayed(trackId) {
@@ -89,6 +104,15 @@ function unmarkPlayed(trackId) {
   if (state.currentTrackId === id) state.currentTrackId = null;
   persistPlayed();
   applyFilters();
+  const item = findTrackItem(id);
+  sendToBackground({
+    type: "BG_UNMARK_PLAY",
+    play: {
+      platform: "soundeo",
+      externalId: id,
+      url: getTrackUrl(item) || ""
+    }
+  });
 }
 
 function onPlayClick(event) {
@@ -196,6 +220,12 @@ async function loadState() {
   state.hideDownloaded = Boolean(res.hideDownloaded);
   state.hideListened = Boolean(res.hideListened);
   state.playedIds = new Set(Object.keys(res.playedTracks || {}));
+  state.wantIds = new Set(
+    Object.keys(res.wantDownloadTracks || {}).filter(function (key) {
+      return key.indexOf("sc:") !== 0;
+    })
+  );
+  setWantMetaMap(res.wantDownloadMeta || {});
   state.playbackRate = clampRate(res.playbackRate);
   state.targetBpm = normalizeTargetBpm(res.targetBpm);
   state.bpmCache = res.bpmCache && typeof res.bpmCache === "object" ? res.bpmCache : {};
@@ -209,6 +239,7 @@ async function loadState() {
   injectTempoWidget();
   applyTargetIfPossible(false);
   console.info("[Digger] Soundeo ready · v" + EXT_VERSION);
+  if (window.DiggerClientLog) window.DiggerClientLog.install("soundeo");
 }
 
 try {
@@ -288,6 +319,30 @@ try {
       });
       return true;
     }
+    if (message.type === "PLAYED_SYNC") {
+      if (message.action === "clear") {
+        state.playedIds.clear();
+        state.currentTrackId = null;
+      } else if (message.action === "remove" && Array.isArray(message.keys)) {
+        for (let i = 0; i < message.keys.length; i++) {
+          state.playedIds.delete(String(message.keys[i]));
+        }
+      } else if (Array.isArray(message.keys)) {
+        for (let i = 0; i < message.keys.length; i++) {
+          const key = String(message.keys[i] || "");
+          if (key && key.indexOf("sc:") !== 0) state.playedIds.add(key);
+        }
+      }
+      applyFilters();
+    }
+    if (message.type === "WANT_SYNC") {
+      mergeWantKeys(message.keys, message.action, message.meta);
+    }
+    if (message.type === "MATCH_PROMPT") {
+      if (window.DiggerMatchModal) {
+        window.DiggerMatchModal.enqueue(message.prompts || []);
+      }
+    }
     if (message.type === "GET_PLAYED_COUNT") {
       sendResponse({ count: state.playedIds.size });
       return true;
@@ -333,6 +388,9 @@ function readPageBpm() {
 }
 
 function boot() {
+  if (window.DiggerListenBehavior) {
+    window.DiggerListenBehavior.init().catch(function () {});
+  }
   loadState().then(function () {
     if (dead) return;
     const pageBpm = readPageBpm();
@@ -342,6 +400,14 @@ function boot() {
     }
   });
   observeTracks();
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      if (typeof endSdRatingSession === "function") endSdRatingSession("tab");
+    }
+  });
+  window.addEventListener("pagehide", function () {
+    if (typeof endSdRatingSession === "function") endSdRatingSession("tab");
+  });
 }
 
 if (document.body) boot();

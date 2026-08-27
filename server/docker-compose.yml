@@ -1,0 +1,14 @@
+services:
+  digger-api:
+    build: .
+    container_name: digger-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8010:8010"
+    volumes:
+      - digger-data:/data
+    environment:
+      DIGGER_DB_PATH: /data/digger.db
+
+volumes:
+  digger-data:

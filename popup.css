@@ -392,6 +392,23 @@ body[data-platform="idle"] {
   font-size: 11px;
 }
 
+.sync-section {
+  flex: 0 0 auto;
+}
+
+.sync-key-row,
+.sync-link-form {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sync-key-row input,
+.sync-link-form input {
+  flex: 1;
+  min-width: 0;
+}
+
 .btn-ghost {
   padding: 4px 8px;
   font-size: 10px;

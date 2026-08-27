@@ -1,9 +1,15 @@
 function observeTracks() {
   if (!document.body || dead) return;
 
-  function onMutations() {
-    if (dead || applying) return;
-    scheduleApply();
+  function onMutations(mutations) {
+    if (dead || applying || isMutationSuppressed()) {
+      noteMutationBatch(mutations && mutations.length ? mutations.length : 0, true);
+      return;
+    }
+    const relevant = mutationLooksRelevant(mutations);
+    noteMutationBatch(mutations && mutations.length ? mutations.length : 0, !relevant);
+    if (!relevant) return;
+    scheduleApplyFromMutation();
   }
 
   attachTrackObserver(onMutations);
@@ -49,6 +55,7 @@ async function loadState() {
     state.playsFilterMode = sanitizePlaysFilterMode(res.scPlaysFilterMode);
     state.hideListened = Boolean(res.hideListened);
     state.playedIds = new Set(Object.keys(res.playedTracks || {}));
+    state.wantIds = new Set(Object.keys(res.wantDownloadTracks || {}));
   }
 
   seedDurationsFromScripts();
@@ -76,6 +83,7 @@ async function loadState() {
       " · bar=" +
       Boolean(document.getElementById(BAR_ID))
   );
+  if (window.DiggerClientLog) window.DiggerClientLog.install("soundcloud");
 }
 
 try {
@@ -140,6 +148,38 @@ try {
       clearPlayedTracks();
       sendToBackground({ type: "BG_CLEAR_PLAYED" });
     }
+    if (message.type === "PLAYED_SYNC") {
+      if (message.action === "clear") {
+        clearPlayedTracks();
+      } else if (message.action === "remove" && Array.isArray(message.keys)) {
+        for (let i = 0; i < message.keys.length; i++) {
+          state.playedIds.delete(String(message.keys[i]));
+        }
+        bumpListenedRevision();
+        scheduleApply();
+      } else if (Array.isArray(message.keys)) {
+        let added = false;
+        for (let i = 0; i < message.keys.length; i++) {
+          const key = String(message.keys[i] || "");
+          if (key.indexOf("sc:") === 0 && !state.playedIds.has(key)) {
+            state.playedIds.add(key);
+            added = true;
+          }
+        }
+        if (added) {
+          bumpListenedRevision();
+          scheduleApply();
+        }
+      }
+    }
+    if (message.type === "WANT_SYNC") {
+      mergeWantKeys(message.keys, message.action);
+    }
+    if (message.type === "MATCH_PROMPT") {
+      if (window.DiggerMatchModal) {
+        window.DiggerMatchModal.enqueue(message.prompts || []);
+      }
+    }
   });
 } catch (_) {
   retire();
@@ -199,10 +239,21 @@ document.addEventListener("keydown", function (e) {
 }, false);
 
 function boot() {
+  if (window.DiggerListenBehavior) {
+    window.DiggerListenBehavior.init().catch(function () {});
+  }
   loadState();
   observeTracks();
   watchSpaNavigation();
   wireListenedTracking();
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      if (typeof endScRatingSession === "function") endScRatingSession("tab");
+    }
+  });
+  window.addEventListener("pagehide", function () {
+    if (typeof endScRatingSession === "function") endScRatingSession("tab");
+  });
 }
 
 if (document.body) boot();

@@ -16,7 +16,7 @@ const FIELD_IDS = {
   playsFilterMode: "digger-sc-plays-filter-mode"
 };
 const SC_DURATION_EVENT = "digger:sc-duration-data";
-const EXT_VERSION = "1.13.0";
+const EXT_VERSION = "1.23.0";
 const RATE_MIN = 0.8;
 const RATE_MAX = 1.2;
 const SET_MAX_SECONDS = 20 * 60;
@@ -40,6 +40,8 @@ const state = {
   playsFilterMode: "min",
   hideListened: false,
   playedIds: new Set(),
+  wantIds: new Set(),
+  ratingsByKey: {},
   currentTrackUrl: null
 };
 
@@ -61,12 +63,6 @@ let overlayLayoutWired = false;
 const durationByUrl = new Map();
 const debugLog = [];
 const DEBUG_LOG_MAX = 10;
-
-function debugNote(message) {
-  debugLog.unshift(new Date().toISOString().slice(11, 19) + " " + message);
-  if (debugLog.length > DEBUG_LOG_MAX) debugLog.length = DEBUG_LOG_MAX;
-  updateDebugPanel();
-}
 
 function retire() {
   if (dead) return;
@@ -177,6 +173,32 @@ function dedupeOverlays() {
 
 function isFeedPage() {
   return /^\/feed(?:[/?#]|$)/.test(location.pathname);
+}
+
+function isUserProfilePage() {
+  const parts = String(location.pathname || "")
+    .replace(/\/+$/, "")
+    .split("/")
+    .filter(Boolean);
+  if (!parts.length) return false;
+  const root = parts[0].toLowerCase();
+  if (typeof SC_RESERVED_PATHS !== "undefined" && SC_RESERVED_PATHS.has(root)) {
+    return false;
+  }
+  if (parts.length === 1) return true;
+  const tab = parts[1].toLowerCase();
+  return (
+    tab === "tracks" ||
+    tab === "popular-tracks" ||
+    tab === "albums" ||
+    tab === "sets" ||
+    tab === "reposts" ||
+    tab === "spotlight"
+  );
+}
+
+function isWantEligiblePage() {
+  return isFeedPage() || isUserProfilePage();
 }
 
 function rateToOffset(rate) {
@@ -713,12 +735,36 @@ function clearStaleMarks(activeRoots) {
   }
 }
 
+function applyWantButtonsOnly() {
+  const t0 = performance.now();
+  const items = getTrackItems();
+  noteFeedItemCount(items.length);
+  let wantBtns = 0;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    applyWantMarkers(item);
+    if (item.querySelector("." + WANT_BTN_CLASS)) wantBtns += 1;
+  }
+  collectAndApplyRatings(items);
+  noteApplyPass(performance.now() - t0, items.length, items.length, 0, wantBtns);
+}
+
 function applyFilters() {
   if (dead) return;
   applying = true;
+  const t0 = performance.now();
+  let processed = 0;
+  let skipped = 0;
+  let wantBtns = 0;
   try {
     if (!isFeedPage()) {
       clearStaleMarks([]);
+      if (isWantEligiblePage()) {
+        applyWantButtonsOnly();
+      } else {
+        clearWantButtons();
+        collectAndApplyRatings(getTrackItems());
+      }
       if (barUi && barUi.meta) barUi.meta.textContent = "Nur im Feed aktiv";
       return;
     }
@@ -739,10 +785,19 @@ function applyFilters() {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (!itemNeedsProcessing(item, filterChanged)) {
+        if (typeof needsWantSync === "function" && needsWantSync(item)) {
+          applyWantMarkers(item);
+        }
+        if (typeof needsRatingSync === "function" && needsRatingSync(item)) {
+          applyRatingBadge(item);
+        }
+        skipped += 1;
+        if (item.querySelector("." + WANT_BTN_CLASS)) wantBtns += 1;
         if (!item.hasAttribute(HIDE_ATTR)) visible += 1;
         continue;
       }
 
+      processed += 1;
       markItemFiltered(item);
       const title = getItemTitle(item);
       const resolved = resolveFilterDuration(item);
@@ -766,10 +821,22 @@ function applyFilters() {
         : false;
       const hideByPlays = state.minPlays > 0 ? !matchesPlaysFilter(item, plays) : false;
       applyListenedMarkers(item);
+      applyWantMarkers(item);
+      if (typeof applyRatingBadge === "function") applyRatingBadge(item);
+      if (item.querySelector("." + WANT_BTN_CLASS)) wantBtns += 1;
       const hideByListened = shouldHideListenedItem(item);
       const hide = hideByTitle || hideByFeedOnly || hideByPlays || hideByListened;
       setItemHidden(item, hide);
       if (!hide) visible += 1;
+    }
+
+    if (typeof queueRatingLookup === "function") {
+      const ratingKeys = [];
+      for (let r = 0; r < items.length; r++) {
+        const ratingKey = typeof itemRatingKey === "function" ? itemRatingKey(items[r]) : null;
+        if (ratingKey) ratingKeys.push(ratingKey);
+      }
+      queueRatingLookup(ratingKeys);
     }
 
     if (barUi && barUi.meta) {
@@ -781,23 +848,46 @@ function applyFilters() {
       barUi.meta.textContent = metaText;
     }
     if (hasFilter) scheduleDomPrune(hasFilter);
-    if (!isHeavyFeed()) updateDebugPanel();
+    noteApplyPass(
+      performance.now() - t0,
+      items.length,
+      processed,
+      skipped,
+      wantBtns
+    );
   } finally {
     applying = false;
+    suppressMutationEcho(80);
   }
 }
 
-function runScheduledWork() {
-  seedDurationsFromScripts();
-  ensureFeedBar();
-  ensureSidePanel();
-  ensurePlaysPanel();
-  ensureDebugPanel();
+function runLightScheduledWork() {
   applyFilters();
-  onAutoLoadDomChange();
+}
+
+function runScheduledWork() {
+  const mode = pendingApplyMode;
+  pendingApplyMode = "light";
+  if (mode === "full") {
+    seedDurationsFromScripts();
+    ensureFeedBar();
+    ensureSidePanel();
+    ensurePlaysPanel();
+    ensureDebugPanel();
+  }
+  applyFilters();
+  if (mode === "full") onAutoLoadDomChange();
 }
 
 function scheduleApply() {
   if (dead || applying) return;
-  scheduleApplyPass(runScheduledWork);
+  scheduleApplyPass(runScheduledWork, { mode: "full" });
+}
+
+function scheduleApplyFromMutation() {
+  if (dead || applying || isMutationSuppressed()) return;
+  scheduleApplyPass(runScheduledWork, {
+    mode: "light",
+    debounceMs: MUTATION_DEBOUNCE_MS
+  });
 }

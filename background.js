@@ -1,3 +1,7 @@
+importScripts("shared/listen-sync.js");
+importScripts("shared/rating-sync.js");
+importScripts("shared/client-log.js");
+
 const PLAYED_STORAGE_KEY = "playedTracks";
 const PLAYED_SCHEMA_KEY = "playedTracksSchema";
 const PLAYED_SCHEMA_VERSION = 2;
@@ -176,17 +180,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         SC_PLAYS_FILTER_MODE_KEY
       ]),
       getPlayed(),
+      getWantDownloads(),
+      getWantMeta(),
       getPlaybackRate(),
       getTargetBpm(),
       getBpmCache(),
       getArtistLists()
     ])
-      .then(([sync, played, playbackRate, targetBpm, bpmCache, artists]) => {
+      .then(([sync, played, wantDownloads, wantMeta, playbackRate, targetBpm, bpmCache, artists]) => {
         sendResponse({
           ok: true,
           hideDownloaded: Boolean(sync.hideDownloaded),
           hideListened: Boolean(sync.hideListened),
           playedTracks: played,
+          wantDownloadTracks: wantDownloads,
+          wantDownloadMeta: wantMeta,
           playbackRate,
           targetBpm,
           bpmCache,
@@ -212,9 +220,99 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "BG_RECORD_PLAY") {
+    enqueuePlay(message.play || message)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_UNMARK_PLAY") {
+    enqueueUnmark(message.play || message)
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_WANT_DOWNLOAD") {
+    enqueueWantDownload(message.play || message)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_UNWANT_DOWNLOAD") {
+    enqueueUnwantDownload(message.play || message)
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_RECORD_SIGNAL") {
+    enqueueSignal(message)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_LOOKUP_RATINGS") {
+    lookupRatings(message.keys || [])
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String(err), ratings: {} }));
+    return true;
+  }
+
+  if (message.type === "BG_MATCH_CONFIRM") {
+    confirmMatchDecision(message)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_MATCH_REJECT") {
+    rejectMatchDecision(message)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_CLIENT_LOG") {
+    enqueueClientLog(message.log || message)
+      .then((ok) => sendResponse({ ok: Boolean(ok) }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_SYNC_INFO") {
+    getSyncInfo()
+      .then((info) => sendResponse(info))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_SYNC_LINK") {
+    linkSyncAccount(message.apiKey || message.syncKey || "")
+      .then((linked) => sendResponse({ ok: true, userId: linked.user_id, apiKey: linked.api_key }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message.type === "BG_SYNC_NOW") {
+    Promise.resolve()
+      .then(() => flushPlayQueue())
+      .then(() => pullRemotePlays(true))
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
   if (message.type === "BG_CLEAR_PLAYED") {
     setPlayed({})
-      .then(() => sendResponse({ ok: true }))
+      .then(() => clearRemotePlays())
+      .then(() => {
+        broadcastToAllPlatformTabs({ type: "PLAYED_SYNC", action: "clear", keys: [] });
+        sendResponse({ ok: true });
+      })
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true;
   }
@@ -430,3 +528,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }
   }
 });
+
+initClientLogging();
+initListenSync();
+initRatingSync();

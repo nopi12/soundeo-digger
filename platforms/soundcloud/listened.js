@@ -50,6 +50,37 @@ function isTrackPath(path) {
   return !SC_RESERVED_PATHS.has(parts[0].toLowerCase());
 }
 
+function artistFromTrackUrl(url) {
+  const path = String(url || "").replace(/^\/+/, "");
+  const parts = path.split("/").filter(Boolean);
+  if (!parts.length) return "";
+  return decodeURIComponent(parts[0]).replace(/-/g, " ");
+}
+
+function buildScPlayPayload(url, item) {
+  const path = normalizeTrackUrl(url) || url;
+  const title = item ? getItemTitle(item) : "";
+  const artist = artistFromTrackUrl(path);
+  let durationSec = null;
+  if (item && typeof readFilterDurationSeconds === "function") {
+    durationSec = readFilterDurationSeconds(item);
+  } else if (path && durationByUrl.has(path)) {
+    durationSec = durationByUrl.get(path);
+  }
+  return {
+    platform: "soundcloud",
+    externalId: path,
+    rawTitle: artist && title ? artist + " - " + title : title || artist,
+    artist: artist,
+    title: title,
+    url: path ? "https://soundcloud.com" + path : "",
+    durationSec: durationSec,
+    bpm: null,
+    label: "",
+    musicalKey: ""
+  };
+}
+
 function persistPlayed() {
   if (dead) return;
   clearTimeout(playedSaveTimer);
@@ -63,15 +94,26 @@ function persistPlayed() {
   }, 250);
 }
 
-function markPlayed(url) {
+function markPlayed(url, item) {
   if (dead || !url) return;
   const key = playedKey(url);
   if (!key) return;
-  if (!state.playedIds.has(key)) {
+  if (state.currentTrackUrl && state.currentTrackUrl !== key) {
+    if (typeof endScRatingSession === "function") endScRatingSession("switch");
+  }
+  const isNew = !state.playedIds.has(key);
+  if (isNew) {
     state.playedIds.add(key);
     persistPlayed();
+    sendToBackground({
+      type: "BG_RECORD_PLAY",
+      play: buildScPlayPayload(url, item || null)
+    });
   }
   state.currentTrackUrl = key;
+  if (typeof noteScTrackSession === "function") {
+    noteScTrackSession(url, item || null);
+  }
   bumpListenedRevision();
   scheduleApply();
 }
@@ -85,6 +127,10 @@ function unmarkPlayed(url) {
   persistPlayed();
   bumpListenedRevision();
   scheduleApply();
+  sendToBackground({
+    type: "BG_UNMARK_PLAY",
+    play: buildScPlayPayload(url, null)
+  });
 }
 
 function isItemPlayed(item) {
@@ -146,7 +192,10 @@ function getPlayingTrackUrl() {
 function syncPlayingTrack() {
   if (dead) return;
   const url = getPlayingTrackUrl();
-  if (!url) return;
+  if (!url) {
+    if (typeof endScRatingSession === "function") endScRatingSession("stop");
+    return;
+  }
   const key = playedKey(url);
   if (key === state.currentTrackUrl && state.playedIds.has(key)) return;
   markPlayed(url);
@@ -221,7 +270,7 @@ function onPlayClick(event) {
   );
   if (!playTarget) return;
   const url = getTrackUrl(item);
-  if (url) markPlayed(url);
+  if (url) markPlayed(url, item);
 }
 
 function onManualToggle(event) {
@@ -238,7 +287,7 @@ function onManualToggle(event) {
   if (!url) return;
   const key = playedKey(url);
   if (key && state.playedIds.has(key)) unmarkPlayed(url);
-  else markPlayed(url);
+  else markPlayed(url, item);
 }
 
 function onAudioPlay() {

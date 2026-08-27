@@ -16,6 +16,30 @@
     <p class="subtitle" id="current-context">Öffne Soundeo oder SoundCloud</p>
   </header>
 
+  <section class="section sync-section">
+    <div class="section-head">
+      <h2>Cloud-Sync</h2>
+      <span class="badge" id="sync-badge">…</span>
+    </div>
+    <p class="hint" id="sync-hint">Hörverhalten geräteübergreifend + für Empfehlungen.</p>
+    <div class="sync-key-row">
+      <input type="text" id="sync-key" class="search" readonly spellcheck="false" />
+      <button type="button" class="btn btn-ghost" id="btn-sync-copy" title="Sync-Key kopieren">Kopieren</button>
+      <button type="button" class="btn btn-secondary" id="btn-sync-now" title="Jetzt synchronisieren">Sync</button>
+    </div>
+    <form class="sync-link-form" id="sync-link-form">
+      <input
+        type="text"
+        id="sync-key-input"
+        class="search"
+        placeholder="Sync-Key von anderem Gerät…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button type="submit" class="btn btn-ghost">Verknüpfen</button>
+    </form>
+  </section>
+
   <section class="section view" id="view-idle" hidden>
     <p class="idle-copy">
       Öffne einen Tab auf <strong>soundeo.com</strong> oder <strong>soundcloud.com</strong>,

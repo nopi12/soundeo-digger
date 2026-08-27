@@ -451,7 +451,7 @@ async function initSoundcloud(tab) {
 
   clearPlayedBtn.addEventListener("click", async () => {
     if (!confirm("Alle gespeicherten Plays löschen?")) return;
-    await chrome.storage.local.set({ playedTracks: {} });
+    await chrome.runtime.sendMessage({ type: "BG_CLEAR_PLAYED" });
     await notifyTab("CLEAR_PLAYED", true);
     await refreshPlayedCount();
   });
@@ -780,7 +780,7 @@ async function initSoundeo(tab) {
 
   els.clearPlayed.addEventListener("click", async () => {
     if (!confirm("Alle selbst getrackten Plays löschen?")) return;
-    await chrome.storage.local.set({ playedTracks: {} });
+    await chrome.runtime.sendMessage({ type: "BG_CLEAR_PLAYED" });
     await notifyTab("CLEAR_PLAYED", true);
     await refreshPlayedCount();
   });
@@ -808,10 +808,97 @@ async function initIdle() {
   });
 }
 
+async function refreshSyncUi() {
+  const badge = $("sync-badge");
+  const hint = $("sync-hint");
+  const keyInput = $("sync-key");
+  if (!badge || !keyInput) return;
+  try {
+    const info = await chrome.runtime.sendMessage({ type: "BG_SYNC_INFO" });
+    if (!info || !info.ok) {
+      badge.textContent = "offline";
+      if (hint) hint.textContent = (info && info.error) || "Sync nicht erreichbar.";
+      return;
+    }
+    keyInput.value = info.apiKey || "";
+    const st = info.status || {};
+    if (st.ok === false) {
+      badge.textContent = "Fehler";
+      if (hint) hint.textContent = st.lastError || "Sync-Fehler";
+    } else {
+      const remote = st.remoteCount != null ? st.remoteCount : "—";
+      const q = info.queueLength || 0;
+      badge.textContent = q ? `Sync · ${q} wartend` : "verbunden";
+      if (hint) {
+        const wants = info.wantCount != null ? info.wantCount : 0;
+        hint.textContent =
+          `Remote: ${remote} gehört · ${wants} vormerken. Key auf anderem Gerät unter „Verknüpfen“ einfügen.`;
+      }
+    }
+  } catch (err) {
+    badge.textContent = "offline";
+    if (hint) hint.textContent = String(err.message || err);
+  }
+}
+
+async function initSyncUi() {
+  const copyBtn = $("btn-sync-copy");
+  const syncNowBtn = $("btn-sync-now");
+  const form = $("sync-link-form");
+  const keyField = $("sync-key-input");
+
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      const key = $("sync-key")?.value || "";
+      if (!key) return;
+      try {
+        await navigator.clipboard.writeText(key);
+        copyBtn.textContent = "Kopiert";
+        setTimeout(() => {
+          copyBtn.textContent = "Kopieren";
+        }, 1200);
+      } catch (_) {}
+    });
+  }
+
+  if (syncNowBtn) {
+    syncNowBtn.addEventListener("click", async () => {
+      syncNowBtn.disabled = true;
+      try {
+        await chrome.runtime.sendMessage({ type: "BG_SYNC_NOW" });
+      } finally {
+        syncNowBtn.disabled = false;
+        await refreshSyncUi();
+      }
+    });
+  }
+
+  if (form) {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const apiKey = (keyField?.value || "").trim();
+      if (!apiKey) return;
+      const res = await chrome.runtime.sendMessage({
+        type: "BG_SYNC_LINK",
+        apiKey
+      });
+      if (!res || !res.ok) {
+        alert((res && res.error) || "Verknüpfen fehlgeschlagen");
+        return;
+      }
+      if (keyField) keyField.value = "";
+      await refreshSyncUi();
+    });
+  }
+
+  await refreshSyncUi();
+}
+
 async function init() {
   const tab = await getActiveTab();
   const platform = detectPlatform(tab?.url || "");
   showView(platform);
+  await initSyncUi();
 
   if (platform === "soundeo") {
     await initSoundeo(tab);

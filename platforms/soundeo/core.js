@@ -5,17 +5,21 @@ const PLAYED_ATTR = "data-soundeo-digger-played";
 const FAV_ARTIST_ATTR = "data-soundeo-digger-fav-artist";
 const RATE_ATTR = "data-digger-rate";
 const SKIP_SECONDS = 30;
-const EXT_VERSION = "1.6.8";
+const EXT_VERSION = "1.23.0";
 const RATE_MIN = 0.8;
 const RATE_MAX = 1.2;
 const DEFAULT_TARGET_BPM = 120;
 const BPM_SLIDER_MIN = 80;
 const BPM_SLIDER_MAX = 160;
+const WANT_ATTR = "data-soundeo-digger-want";
 
 const state = {
   hideDownloaded: false,
   hideListened: false,
   playedIds: new Set(),
+  wantIds: new Set(),
+  wantMetaByFp: {},
+  ratingsByKey: {},
   playbackRate: 1,
   targetBpm: DEFAULT_TARGET_BPM,
   sourceBpm: null,
@@ -114,14 +118,89 @@ function parseArtistsFromTitle(text) {
     .filter(Boolean);
 }
 
-function getTrackArtists(item) {
-  if (!item) return [];
+function getTrackRawTitle(item) {
+  if (!item) return "";
   const link =
     item.querySelector(".info strong a[href*='/track/']") ||
     item.querySelector(".info > strong > a") ||
     item.querySelector(".info strong a");
-  if (!link) return [];
-  return parseArtistsFromTitle(link.textContent);
+  if (!link) return "";
+  return String(link.textContent || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseTrackParts(rawTitle) {
+  const raw = String(rawTitle || "").replace(/\s+/g, " ").trim();
+  if (!raw) return { artist: "", title: "" };
+  const sep = raw.indexOf(" - ");
+  if (sep < 0) return { artist: "", title: raw };
+  return {
+    artist: raw.slice(0, sep).trim(),
+    title: raw
+      .slice(sep + 3)
+      .replace(/\[[^\]]*]/g, "")
+      .replace(/\([^)]*(?:mix|edit|version|remix|vip)[^)]*\)/gi, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  };
+}
+
+function normalizeWantText(value) {
+  let text = String(value || '').toLowerCase();
+  try {
+    text = text.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  } catch (_) {}
+  text = text.replace(/\([^)]*\)/g, ' ').replace(/\[[^\]]*\]/g, ' ');
+  text = text.replace(
+    /\b(premiere|exclusive|original\s+mix|extended\s+mix|radio\s+edit|official(?:\s+audio)?)\b/g,
+    ' '
+  );
+  text = text.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const parts = text.split(' ');
+  if (parts.length) {
+    const last = parts[parts.length - 1];
+    if (last.length > 4 && last.endsWith('s') && !last.endsWith('ss')) {
+      parts[parts.length - 1] = last.slice(0, -1);
+      text = parts.join(' ');
+    }
+  }
+  return text;
+}
+
+function wantFingerprint(artist, title) {
+  const a = normalizeWantText(artist);
+  const t = normalizeWantText(title);
+  if (!a || !t) return '';
+  return a + '|' + t;
+}
+
+function setWantMetaMap(meta) {
+  state.wantMetaByFp =
+    meta && typeof meta === 'object' ? Object.assign({}, meta) : {};
+}
+
+function findWantMetaForItem(item) {
+  const rawTitle = getTrackRawTitle(item);
+  const parts = parseTrackParts(rawTitle);
+  const fp = wantFingerprint(parts.artist, parts.title);
+  if (fp && state.wantMetaByFp[fp]) return state.wantMetaByFp[fp];
+  return null;
+}
+
+function isSoundeoTrackWanted(item, trackId) {
+  const id =
+    trackId != null
+      ? String(trackId)
+      : item && item.getAttribute('data-track-id');
+  if (findWantMetaForItem(item)) return true;
+  if (id && state.wantIds.has(String(id))) return true;
+  return false;
+}
+
+function getTrackArtists(item) {
+  if (!item) return [];
+  return parseArtistsFromTitle(getTrackRawTitle(item));
 }
 
 function trackHasBlockedArtist(item) {
@@ -257,6 +336,86 @@ function readListBpm(item) {
   if (!item) return null;
   const bpmEl = item.querySelector(".bpm");
   return bpmEl ? parseBpmFromText(bpmEl.textContent) : null;
+}
+
+function parseMmSsToSeconds(text) {
+  const m = String(text || "").match(/\b(\d{1,2}):([0-5]\d)\b/);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function readListDurationSeconds(item) {
+  if (!item) return null;
+  const selectors = [
+    ".length",
+    ".time",
+    ".duration",
+    ".track-length",
+    "[class*='length']",
+    "[class*='duration']"
+  ];
+  for (let i = 0; i < selectors.length; i++) {
+    let nodes;
+    try {
+      nodes = item.querySelectorAll(selectors[i]);
+    } catch (_) {
+      nodes = [];
+    }
+    for (let j = 0; j < nodes.length; j++) {
+      const sec = parseMmSsToSeconds(nodes[j].textContent);
+      if (sec != null && sec > 30 && sec < 3600) return sec;
+    }
+  }
+  const info = item.querySelector(".info");
+  if (info) {
+    const sec = parseMmSsToSeconds(info.textContent);
+    if (sec != null && sec > 30 && sec < 3600) return sec;
+  }
+  return null;
+}
+
+function readListMusicalKey(item) {
+  if (!item) return "";
+  const el =
+    item.querySelector(".key") ||
+    item.querySelector(".tonality") ||
+    item.querySelector("[class*='key']");
+  if (!el) return "";
+  const text = String(el.textContent || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text || /bpm/i.test(text)) return "";
+  return text.slice(0, 32);
+}
+
+function readListLabelName(item) {
+  if (!item || typeof parseLabelInfoFromItem !== "function") return "";
+  try {
+    const info = parseLabelInfoFromItem(item);
+    return info && info.name ? info.name : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function buildSoundeoPlayPayload(item, trackId) {
+  const id = String(trackId || (item && item.getAttribute("data-track-id")) || "");
+  const rawTitle = getTrackRawTitle(item);
+  const parts = parseTrackParts(rawTitle);
+  const bpm =
+    (id && state.bpmCache && state.bpmCache[id]) || readListBpm(item) || null;
+  return {
+    platform: "soundeo",
+    externalId: id,
+    rawTitle: rawTitle,
+    artist: parts.artist,
+    title: parts.title,
+    url: getTrackUrl(item) || "",
+    durationSec: readListDurationSeconds(item),
+    bpm: bpm,
+    label: readListLabelName(item),
+    musicalKey: readListMusicalKey(item)
+  };
 }
 
 async function fetchTrackBpm(url) {

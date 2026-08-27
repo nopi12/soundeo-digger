@@ -323,10 +323,28 @@ function ensureArtistActions(item) {
         e.preventDefault();
         e.stopPropagation();
         triggerWavDownload(item);
+        if (typeof recordSdDownload === "function") recordSdDownload(item);
       },
       true
     );
     bar.appendChild(dlBtn);
+  }
+
+  let wantBtn = bar.querySelector(".sd-artist-want");
+  if (!wantBtn) {
+    wantBtn = document.createElement("button");
+    wantBtn.type = "button";
+    wantBtn.className = "sd-artist-btn sd-artist-want";
+    wantBtn.addEventListener(
+      "click",
+      function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleWantTrack(item);
+      },
+      true
+    );
+    bar.appendChild(wantBtn);
   }
 
   ensureArtistTracksButton(item, bar);
@@ -334,6 +352,8 @@ function ensureArtistActions(item) {
 
   positionArtistActions(item, bar);
 
+  const trackId = item.getAttribute("data-track-id");
+  const wanted = isSoundeoTrackWanted(item, trackId);
   const blocked = trackHasBlockedArtist(item);
   const fav = trackHasFavoriteArtist(item);
   const downloaded = isDownloaded(item);
@@ -343,4 +363,122 @@ function ensureArtistActions(item) {
     dlBtn.classList.toggle("is-downloaded", downloaded);
     dlBtn.title = downloaded ? "WAV herunterladen (bereits geladen)" : "WAV herunterladen";
   }
+  if (wantBtn) {
+    wantBtn.classList.toggle("is-active", wanted);
+    wantBtn.textContent = wanted ? "✓" : "⬇";
+    wantBtn.title = wanted
+      ? "Download-Vormerkung entfernen"
+      : "Zum baldigen Download vormerken";
+    wantBtn.setAttribute("aria-label", wantBtn.title);
+    wantBtn.setAttribute("aria-pressed", wanted ? "true" : "false");
+  }
+  if (wanted) item.setAttribute(WANT_ATTR, "");
+  else item.removeAttribute(WANT_ATTR);
+}
+
+function toggleWantTrack(item) {
+  if (dead || !item) return;
+  const trackId = item.getAttribute("data-track-id");
+  if (!trackId) return;
+  const id = String(trackId);
+  const next = !isSoundeoTrackWanted(item, id);
+  if (next) state.wantIds.add(id);
+  else state.wantIds.delete(id);
+
+  const play = buildSoundeoPlayPayload(item, id);
+  // Keep local meta in sync immediately for title matching
+  if (next) {
+    const fp = wantFingerprint(play.artist, play.title);
+    if (fp) {
+      state.wantMetaByFp[fp] = {
+        artist: play.artist,
+        title: play.title,
+        artistNorm: normalizeWantText(play.artist),
+        titleNorm: normalizeWantText(play.title),
+        keys: [id],
+        trackId: id
+      };
+    }
+  } else {
+    const fp = wantFingerprint(play.artist, play.title);
+    if (fp && state.wantMetaByFp[fp]) delete state.wantMetaByFp[fp];
+  }
+
+  sendToBackground({
+    type: next ? "BG_WANT_DOWNLOAD" : "BG_UNWANT_DOWNLOAD",
+    play: play
+  });
+  if (window.DiggerClientLog) {
+    window.DiggerClientLog.report("info", next ? "want click (soundeo)" : "unwant click (soundeo)", {
+      source: "want-ui",
+      platform: "soundeo",
+      context: {
+        step: "ui-click",
+        wanted: next,
+        trackId: id,
+        fingerprint: wantFingerprint(play.artist, play.title),
+        play: play
+      }
+    });
+  }
+  // Immediate UI update (don't wait for sync roundtrip)
+  ensureArtistActions(item);
+}
+
+function mergeWantKeys(keys, action, meta) {
+  if (meta && typeof meta === "object") setWantMetaMap(meta);
+  if (action === "clear") {
+    state.wantIds.clear();
+    state.wantMetaByFp = {};
+    scheduleApply();
+    if (window.DiggerClientLog) {
+      window.DiggerClientLog.warn("want sync clear (soundeo)", {
+        source: "want-ui",
+        platform: "soundeo",
+        context: { step: "ui-merge", action: "clear" }
+      });
+    }
+    return;
+  }
+  if (!Array.isArray(keys)) {
+    if (meta) scheduleApply();
+    return;
+  }
+  let changed = false;
+  const applied = [];
+  const skippedSc = [];
+  for (let i = 0; i < keys.length; i++) {
+    const key = String(keys[i] || "");
+    if (!key) continue;
+    if (key.indexOf("sc:") === 0) {
+      skippedSc.push(key);
+      continue;
+    }
+    if (action === "remove") {
+      if (state.wantIds.delete(key)) {
+        changed = true;
+        applied.push(key);
+      }
+    } else if (!state.wantIds.has(key)) {
+      state.wantIds.add(key);
+      changed = true;
+      applied.push(key);
+    }
+  }
+  if (window.DiggerClientLog) {
+    window.DiggerClientLog.report("info", "want sync merge (soundeo)", {
+      source: "want-ui",
+      platform: "soundeo",
+      context: {
+        step: "ui-merge",
+        action: action || "add",
+        incoming: keys.length,
+        applied: applied,
+        skippedSc: skippedSc.slice(0, 20),
+        wantCount: state.wantIds.size,
+        metaCount: Object.keys(state.wantMetaByFp).length
+      }
+    });
+  }
+  if (changed || meta) scheduleApply();
 }

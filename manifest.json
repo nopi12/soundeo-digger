@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Digger",
-  "version": "1.13.0",
+  "version": "1.23.0",
   "description": "Digging für Soundeo & SoundCloud: Charts, Preview-Tempo, Title-Filter, Artists.",
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": [
     "https://soundeo.com/*",
     "https://soundcloud.com/*",
-    "https://*.soundcloud.com/*"
+    "https://*.soundcloud.com/*",
+    "https://fervent-panini.93-90-203-17.plesk.page/digger-api/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -37,10 +38,15 @@
       "matches": ["https://soundeo.com/*"],
       "js": [
         "genres.js",
+        "shared/match-modal.js",
+        "shared/client-log-content.js",
+        "shared/listen-behavior.js",
+        "shared/rating-content.js",
         "platforms/soundeo/core.js",
         "platforms/soundeo/genres.js",
         "platforms/soundeo/overlay.js",
         "platforms/soundeo/tracks.js",
+        "platforms/soundeo/rating.js",
         "platforms/soundeo/artist-tracks.js",
         "platforms/soundeo/label-tracks.js",
         "platforms/soundeo/boot.js"
@@ -63,10 +69,16 @@
         "https://*.soundcloud.com/*"
       ],
       "js": [
+        "shared/match-modal.js",
+        "shared/client-log-content.js",
+        "shared/listen-behavior.js",
+        "shared/rating-content.js",
         "platforms/soundcloud/perf.js",
         "platforms/soundcloud/core.js",
         "platforms/soundcloud/plays.js",
         "platforms/soundcloud/listened.js",
+        "platforms/soundcloud/want.js",
+        "platforms/soundcloud/rating.js",
         "platforms/soundcloud/autoload.js",
         "platforms/soundcloud/ui.js",
         "platforms/soundcloud/debug.js",
