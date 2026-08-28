@@ -249,6 +249,31 @@ function isDownloaded(item) {
   return Boolean(item.querySelector(".download.downloaded"));
 }
 
+function ensureActionSep(bar) {
+  let sep = bar.querySelector(".sd-artist-actions-sep");
+  if (!sep) {
+    sep = document.createElement("span");
+    sep.className = "sd-artist-actions-sep";
+    sep.setAttribute("aria-hidden", "true");
+  }
+  return sep;
+}
+
+function orderArtistActions(bar) {
+  if (!bar) return;
+  const want = bar.querySelector(".sd-artist-want");
+  const dl = bar.querySelector(".sd-artist-download");
+  const sep = ensureActionSep(bar);
+  const fav = bar.querySelector(".sd-artist-fav");
+  const block = bar.querySelector(".sd-artist-block");
+  const artist = bar.querySelector(".sd-artist-tracks");
+  const label = bar.querySelector(".sd-label-tracks");
+  const ordered = [want, dl, sep, fav, block, artist, label].filter(Boolean);
+  for (let i = 0; i < ordered.length; i++) {
+    bar.appendChild(ordered[i]);
+  }
+}
+
 function ensureArtistActions(item) {
   if (!item || dead) return;
   trimSoundeoUi(item);
@@ -263,6 +288,42 @@ function ensureArtistActions(item) {
     bar = document.createElement("div");
     bar.className = "sd-artist-actions";
     item.appendChild(bar);
+  }
+
+  let wantBtn = bar.querySelector(".sd-artist-want");
+  if (!wantBtn) {
+    wantBtn = document.createElement("button");
+    wantBtn.type = "button";
+    wantBtn.className = "sd-artist-btn sd-artist-want";
+    wantBtn.addEventListener(
+      "click",
+      function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleWantTrack(item);
+      },
+      true
+    );
+    bar.appendChild(wantBtn);
+  }
+
+  let dlBtn = bar.querySelector(".sd-artist-download");
+  if (!dlBtn) {
+    dlBtn = document.createElement("button");
+    dlBtn.type = "button";
+    dlBtn.className = "sd-artist-btn sd-artist-download";
+    dlBtn.textContent = "WAV";
+    dlBtn.addEventListener(
+      "click",
+      function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerWavDownload(item);
+        if (typeof recordSdDownload === "function") recordSdDownload(item);
+      },
+      true
+    );
+    bar.appendChild(dlBtn);
   }
 
   let favBtn = bar.querySelector(".sd-artist-fav");
@@ -309,47 +370,9 @@ function ensureArtistActions(item) {
     bar.appendChild(blockBtn);
   }
 
-  let dlBtn = bar.querySelector(".sd-artist-download");
-  if (!dlBtn) {
-    dlBtn = document.createElement("button");
-    dlBtn.type = "button";
-    dlBtn.className = "sd-artist-btn sd-artist-download";
-    dlBtn.title = "WAV herunterladen";
-    dlBtn.setAttribute("aria-label", "WAV herunterladen");
-    dlBtn.textContent = "↓";
-    dlBtn.addEventListener(
-      "click",
-      function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerWavDownload(item);
-        if (typeof recordSdDownload === "function") recordSdDownload(item);
-      },
-      true
-    );
-    bar.appendChild(dlBtn);
-  }
-
-  let wantBtn = bar.querySelector(".sd-artist-want");
-  if (!wantBtn) {
-    wantBtn = document.createElement("button");
-    wantBtn.type = "button";
-    wantBtn.className = "sd-artist-btn sd-artist-want";
-    wantBtn.addEventListener(
-      "click",
-      function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleWantTrack(item);
-      },
-      true
-    );
-    bar.appendChild(wantBtn);
-  }
-
   ensureArtistTracksButton(item, bar);
   ensureLabelTracksButton(item, bar);
-
+  orderArtistActions(bar);
   positionArtistActions(item, bar);
 
   const trackId = item.getAttribute("data-track-id");
@@ -360,15 +383,19 @@ function ensureArtistActions(item) {
   if (favBtn) favBtn.classList.toggle("is-active", fav && !blocked);
   if (blockBtn) blockBtn.classList.toggle("is-active", blocked);
   if (dlBtn) {
+    dlBtn.textContent = "WAV";
     dlBtn.classList.toggle("is-downloaded", downloaded);
-    dlBtn.title = downloaded ? "WAV herunterladen (bereits geladen)" : "WAV herunterladen";
+    dlBtn.title = downloaded
+      ? "WAV herunterladen (bereits geladen)"
+      : "WAV jetzt herunterladen";
+    dlBtn.setAttribute("aria-label", dlBtn.title);
   }
   if (wantBtn) {
     wantBtn.classList.toggle("is-active", wanted);
-    wantBtn.textContent = wanted ? "✓" : "⬇";
+    wantBtn.textContent = wanted ? "Vorgemerkt" : "Vormerken";
     wantBtn.title = wanted
-      ? "Download-Vormerkung entfernen"
-      : "Zum baldigen Download vormerken";
+      ? "Vormerken entfernen"
+      : "Vormerken (später laden — nicht sofort downloaden)";
     wantBtn.setAttribute("aria-label", wantBtn.title);
     wantBtn.setAttribute("aria-pressed", wanted ? "true" : "false");
   }

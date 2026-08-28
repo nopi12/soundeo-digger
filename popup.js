@@ -6,7 +6,9 @@ const STORAGE_KEYS = {
   randomYears: "randomYears",
   blockedArtists: "blockedArtists",
   favoriteArtists: "favoriteArtists",
-  scTitleFilter: "scTitleFilter"
+  scTitleFilter: "scTitleFilter",
+  skipMatchPrompts: "diggerSkipMatchPrompts",
+  matchMinScore: "diggerMatchMinScore"
 };
 
 const BASE_PARAMS = {
@@ -17,37 +19,6 @@ const BASE_PARAMS = {
   trackTypeFilter: "0",
   topTimeFilter: "0"
 };
-
-function normalizeArtistKey(name) {
-  return String(name || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
-
-function sanitizeArtistList(list) {
-  if (!Array.isArray(list)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const item of list) {
-    const name = String(item || "").trim().replace(/\s+/g, " ");
-    const key = normalizeArtistKey(name);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(name);
-  }
-  return out;
-}
-
-function sanitizeTitleFilter(value) {
-  return String(value || "").trim().slice(0, 120);
-}
-
-function clampRate(rate) {
-  const n = Number(rate);
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(1.2, Math.max(0.8, n));
-}
 
 function rateToOffset(rate) {
   return Math.round((clampRate(rate) - 1) * 100);
@@ -206,11 +177,13 @@ function showView(platform) {
   const soundeo = $("view-soundeo");
   const soundcloud = $("view-soundcloud");
   const pill = $("platform-pill");
+  const legend = $("dig-legend");
   const body = document.body;
 
   idle.hidden = platform !== "idle";
   soundeo.hidden = platform !== "soundeo";
   soundcloud.hidden = platform !== "soundcloud";
+  if (legend) legend.hidden = platform === "idle";
 
   body.dataset.platform = platform;
   if (platform === "soundeo") {
@@ -333,48 +306,50 @@ function createGenreItem(genre, { isFavorite, isActive, onSelect, onToggleFav })
 }
 
 async function initSoundcloud(tab) {
-  $("current-context").textContent = "Stream / Listen filtern";
+  $("current-context").textContent = "Diggen auf der Seite";
 
   const stored = await getStorage([
     STORAGE_KEYS.scTitleFilter,
-    STORAGE_KEYS.hideListened
+    STORAGE_KEYS.hideListened,
+    STORAGE_KEYS.skipMatchPrompts,
+    STORAGE_KEYS.matchMinScore
   ]);
-  let titleFilter = sanitizeTitleFilter(stored[STORAGE_KEYS.scTitleFilter]);
   let hideListened = Boolean(stored[STORAGE_KEYS.hideListened]);
+  const titleFilter = sanitizeTitleFilter(stored[STORAGE_KEYS.scTitleFilter]);
   const local = await chrome.storage.local.get(["playbackRate"]);
-  let playbackRate = clampRate(local.playbackRate);
+  const playbackRate = clampRate(local.playbackRate);
 
-  const filterInput = $("sc-title-filter");
-  const filterBadge = $("sc-filter-badge");
-  const clearBtn = $("btn-sc-filter-clear");
-  const rateSlider = $("sc-rate-slider");
-  const rateLabel = $("sc-rate-label");
-  const rateReset = $("btn-sc-rate-reset");
-  const hideListenedInput = $("sc-hide-listened");
+  const filterStatus = $("sc-status-filter");
+  const rateStatus = $("sc-status-rate");
   const playedCount = $("sc-played-count");
+  const hideListenedInput = $("sc-hide-listened");
   const clearPlayedBtn = $("btn-sc-clear-played");
+  const skipMatchInput = $("sc-skip-match-prompts");
+  const matchMinScoreSelect = $("sc-match-min-score");
 
-  function updateFilterUi(value) {
-    titleFilter = sanitizeTitleFilter(value);
-    if (filterInput.value !== titleFilter) filterInput.value = titleFilter;
-    filterBadge.textContent = titleFilter ? "aktiv" : "aus";
+  if (filterStatus) {
+    filterStatus.textContent = titleFilter ? `„${titleFilter}"` : "aus";
   }
-
-  function updateRateUi(rate) {
-    playbackRate = clampRate(rate);
-    const offset = rateToOffset(playbackRate);
-    rateSlider.value = String(offset);
-    rateLabel.textContent = formatOffset(offset);
+  if (rateStatus) {
+    rateStatus.textContent = formatOffset(rateToOffset(playbackRate));
   }
-
-  updateFilterUi(titleFilter);
-  updateRateUi(playbackRate);
-  hideListenedInput.checked = hideListened;
+  if (hideListenedInput) hideListenedInput.checked = hideListened;
+  if (skipMatchInput) {
+    skipMatchInput.checked = Boolean(stored[STORAGE_KEYS.skipMatchPrompts]);
+  }
+  if (matchMinScoreSelect) {
+    const score = String(sanitizeMatchMinScore(stored[STORAGE_KEYS.matchMinScore]));
+    matchMinScoreSelect.value = ["0", "0.6", "0.75", "0.85"].includes(score)
+      ? score
+      : "0";
+  }
 
   async function refreshPlayedCount() {
     const localPlayed = await chrome.storage.local.get(["playedTracks"]);
     const count = Object.keys(localPlayed.playedTracks || {}).length;
-    playedCount.textContent = `${count} Play${count === 1 ? "" : "s"} gespeichert`;
+    if (playedCount) {
+      playedCount.textContent = count === 1 ? "1 Track" : `${count} Tracks`;
+    }
   }
 
   async function notifyTab(type, value) {
@@ -386,75 +361,38 @@ async function initSoundcloud(tab) {
     }
   }
 
-  async function persistFilter(next) {
-    updateFilterUi(next);
-    // Direct storage write + BG broadcast + tab ping (belt & suspenders)
-    await chrome.storage.sync.set({ [STORAGE_KEYS.scTitleFilter]: titleFilter });
-    try {
-      await chrome.runtime.sendMessage({
-        type: "BG_SET_SC_TITLE_FILTER",
-        scTitleFilter: titleFilter
-      });
-    } catch {
-      // ignore
-    }
-    await notifyTab("SET_SC_TITLE_FILTER", titleFilter);
-    await notifyTab("SC_TITLE_FILTER_CHANGED", titleFilter);
-    // Also send payload shape content script expects for SC_TITLE_FILTER_CHANGED
-    if (tab?.id) {
-      try {
-        await chrome.tabs.sendMessage(tab.id, {
-          type: "SC_TITLE_FILTER_CHANGED",
-          scTitleFilter: titleFilter
-        });
-      } catch {
-        // ignore
-      }
-    }
+  if (hideListenedInput) {
+    hideListenedInput.addEventListener("change", async () => {
+      hideListened = hideListenedInput.checked;
+      await setStorage({ [STORAGE_KEYS.hideListened]: hideListened });
+      await notifyTab("SET_HIDE_LISTENED", hideListened);
+    });
   }
 
-  let filterTimer = null;
-  filterInput.addEventListener("input", () => {
-    updateFilterUi(filterInput.value);
-    clearTimeout(filterTimer);
-    filterTimer = setTimeout(() => {
-      persistFilter(filterInput.value);
-    }, 120);
-  });
-
-  clearBtn.addEventListener("click", async () => {
-    await persistFilter("");
-  });
-
-  rateSlider.addEventListener("input", async () => {
-    const offset = Number(rateSlider.value) || 0;
-    updateRateUi(1 + offset / 100);
-    await chrome.runtime.sendMessage({
-      type: "BG_SET_PLAYBACK_RATE",
-      playbackRate
+  if (skipMatchInput) {
+    skipMatchInput.addEventListener("change", async () => {
+      await setStorage({
+        [STORAGE_KEYS.skipMatchPrompts]: skipMatchInput.checked
+      });
     });
-  });
+  }
 
-  rateReset.addEventListener("click", async () => {
-    updateRateUi(1);
-    await chrome.runtime.sendMessage({
-      type: "BG_SET_PLAYBACK_RATE",
-      playbackRate: 1
+  if (matchMinScoreSelect) {
+    matchMinScoreSelect.addEventListener("change", async () => {
+      await setStorage({
+        [STORAGE_KEYS.matchMinScore]: sanitizeMatchMinScore(matchMinScoreSelect.value)
+      });
     });
-  });
+  }
 
-  hideListenedInput.addEventListener("change", async () => {
-    hideListened = hideListenedInput.checked;
-    await setStorage({ [STORAGE_KEYS.hideListened]: hideListened });
-    await notifyTab("SET_HIDE_LISTENED", hideListened);
-  });
-
-  clearPlayedBtn.addEventListener("click", async () => {
-    if (!confirm("Alle gespeicherten Plays löschen?")) return;
-    await chrome.runtime.sendMessage({ type: "BG_CLEAR_PLAYED" });
-    await notifyTab("CLEAR_PLAYED", true);
-    await refreshPlayedCount();
-  });
+  if (clearPlayedBtn) {
+    clearPlayedBtn.addEventListener("click", async () => {
+      if (!confirm("Alle gehörten Tracks löschen?")) return;
+      await chrome.runtime.sendMessage({ type: "BG_CLEAR_PLAYED" });
+      await notifyTab("CLEAR_PLAYED", true);
+      await refreshPlayedCount();
+    });
+  }
 
   await refreshPlayedCount();
 }
@@ -467,7 +405,9 @@ async function initSoundeo(tab) {
     STORAGE_KEYS.hideListened,
     STORAGE_KEYS.randomYears,
     STORAGE_KEYS.blockedArtists,
-    STORAGE_KEYS.favoriteArtists
+    STORAGE_KEYS.favoriteArtists,
+    STORAGE_KEYS.skipMatchPrompts,
+    STORAGE_KEYS.matchMinScore
   ]);
 
   let favorites = stored[STORAGE_KEYS.favorites] || [];
@@ -490,6 +430,8 @@ async function initSoundeo(tab) {
     randomYears: $("random-years"),
     hideDownloaded: $("hide-downloaded"),
     hideListened: $("hide-listened"),
+    skipMatchPrompts: $("skip-match-prompts"),
+    matchMinScore: $("match-min-score"),
     playedCount: $("played-count"),
     clearPlayed: $("btn-clear-played"),
     artistFavList: $("artist-fav-list"),
@@ -509,11 +451,21 @@ async function initSoundeo(tab) {
   els.randomYears.value = String(randomYears);
   els.hideDownloaded.checked = hideDownloaded;
   els.hideListened.checked = hideListened;
+  if (els.skipMatchPrompts) {
+    els.skipMatchPrompts.checked = Boolean(stored[STORAGE_KEYS.skipMatchPrompts]);
+  }
+  if (els.matchMinScore) {
+    const score = String(sanitizeMatchMinScore(stored[STORAGE_KEYS.matchMinScore]));
+    els.matchMinScore.value = ["0", "0.6", "0.75", "0.85"].includes(score)
+      ? score
+      : "0";
+  }
 
   async function refreshPlayedCount() {
     const local = await chrome.storage.local.get(["playedTracks"]);
     const count = Object.keys(local.playedTracks || {}).length;
-    els.playedCount.textContent = `${count} Play${count === 1 ? "" : "s"} gespeichert`;
+    els.playedCount.textContent =
+      count === 1 ? "1 gehört" : `${count} gehört`;
   }
 
   async function notifyTab(type, value) {
@@ -764,6 +716,22 @@ async function initSoundeo(tab) {
     await notifyTab("SET_HIDE_LISTENED", hideListened);
   });
 
+  if (els.skipMatchPrompts) {
+    els.skipMatchPrompts.addEventListener("change", async () => {
+      await setStorage({
+        [STORAGE_KEYS.skipMatchPrompts]: els.skipMatchPrompts.checked
+      });
+    });
+  }
+
+  if (els.matchMinScore) {
+    els.matchMinScore.addEventListener("change", async () => {
+      await setStorage({
+        [STORAGE_KEYS.matchMinScore]: sanitizeMatchMinScore(els.matchMinScore.value)
+      });
+    });
+  }
+
   els.artistFavForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     addArtist(els.artistFavInput.value, "fav");
@@ -779,7 +747,7 @@ async function initSoundeo(tab) {
   });
 
   els.clearPlayed.addEventListener("click", async () => {
-    if (!confirm("Alle selbst getrackten Plays löschen?")) return;
+    if (!confirm("Alle gehörten Tracks löschen?")) return;
     await chrome.runtime.sendMessage({ type: "BG_CLEAR_PLAYED" });
     await notifyTab("CLEAR_PLAYED", true);
     await refreshPlayedCount();
@@ -812,11 +780,13 @@ async function refreshSyncUi() {
   const badge = $("sync-badge");
   const hint = $("sync-hint");
   const keyInput = $("sync-key");
+  const section = $("sync-section");
   if (!badge || !keyInput) return;
   try {
     const info = await chrome.runtime.sendMessage({ type: "BG_SYNC_INFO" });
     if (!info || !info.ok) {
       badge.textContent = "offline";
+      if (section) section.classList.remove("is-connected");
       if (hint) hint.textContent = (info && info.error) || "Sync nicht erreichbar.";
       return;
     }
@@ -824,19 +794,24 @@ async function refreshSyncUi() {
     const st = info.status || {};
     if (st.ok === false) {
       badge.textContent = "Fehler";
-      if (hint) hint.textContent = st.lastError || "Sync-Fehler";
+      if (section) section.classList.remove("is-connected");
+      if (hint) hint.textContent = st.lastError || "Sync-Fehler — später erneut versuchen.";
     } else {
       const remote = st.remoteCount != null ? st.remoteCount : "—";
       const q = info.queueLength || 0;
-      badge.textContent = q ? `Sync · ${q} wartend` : "verbunden";
+      badge.textContent = q ? `verbunden · ${q} wartend` : "verbunden";
+      if (section) section.classList.toggle("is-connected", !q);
       if (hint) {
         const wants = info.wantCount != null ? info.wantCount : 0;
         hint.textContent =
-          `Remote: ${remote} gehört · ${wants} vormerken. Key auf anderem Gerät unter „Verknüpfen“ einfügen.`;
+          `${remote} gehört · ${wants} vorgemerkt` +
+          (q ? ` · ${q} in Warteschlange` : "") +
+          " — Key unter „Gerät verknüpfen“.";
       }
     }
   } catch (err) {
     badge.textContent = "offline";
+    if (section) section.classList.remove("is-connected");
     if (hint) hint.textContent = String(err.message || err);
   }
 }
@@ -857,7 +832,9 @@ async function initSyncUi() {
         setTimeout(() => {
           copyBtn.textContent = "Kopieren";
         }, 1200);
-      } catch (_) {}
+      } catch {
+        // Clipboard may be blocked in popup context
+      }
     });
   }
 
@@ -899,6 +876,10 @@ async function init() {
   const platform = detectPlatform(tab?.url || "");
   showView(platform);
   await initSyncUi();
+
+  if (window.DiggerOnboarding) {
+    window.DiggerOnboarding.show("popup", { popup: true });
+  }
 
   if (platform === "soundeo") {
     await initSoundeo(tab);

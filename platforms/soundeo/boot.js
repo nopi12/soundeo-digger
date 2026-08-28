@@ -240,6 +240,7 @@ async function loadState() {
   applyTargetIfPossible(false);
   console.info("[Digger] Soundeo ready · v" + EXT_VERSION);
   if (window.DiggerClientLog) window.DiggerClientLog.install("soundeo");
+  if (window.DiggerOnboarding) window.DiggerOnboarding.show("soundeo");
 }
 
 try {

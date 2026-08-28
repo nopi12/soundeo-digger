@@ -13,9 +13,13 @@
 
   function extVersion() {
     try {
+      if (typeof getExtVersion === "function") return getExtVersion();
       if (typeof EXT_VERSION !== "undefined" && EXT_VERSION) return String(EXT_VERSION);
+      if (chrome.runtime && chrome.runtime.getManifest) {
+        return String(chrome.runtime.getManifest().version || "0");
+      }
     } catch (_) {}
-    return "1.19.0";
+    return "0";
   }
 
   function sendLog(entry) {

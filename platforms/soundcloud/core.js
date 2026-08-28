@@ -16,7 +16,8 @@ const FIELD_IDS = {
   playsFilterMode: "digger-sc-plays-filter-mode"
 };
 const SC_DURATION_EVENT = "digger:sc-duration-data";
-const EXT_VERSION = "1.23.0";
+const EXT_VERSION =
+  typeof getExtVersion === "function" ? getExtVersion() : "1.26.0";
 const RATE_MIN = 0.8;
 const RATE_MAX = 1.2;
 const SET_MAX_SECONDS = 20 * 60;
@@ -113,16 +114,6 @@ function sendToBackground(message) {
       resolve(null);
     }
   });
-}
-
-function clampRate(rate) {
-  const n = Number(rate);
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(RATE_MAX, Math.max(RATE_MIN, n));
-}
-
-function sanitizeTitleFilter(value) {
-  return String(value || "").trim().slice(0, 120);
 }
 
 function dedupeElementById(id) {
@@ -301,18 +292,6 @@ function setTitleFilter(value, persist) {
       scTitleFilter: state.titleFilter
     });
   }, 150);
-}
-
-function sanitizeFeedOnlyMode(value) {
-  const mode = String(value || "").trim();
-  if (
-    mode === FEED_ONLY_MODES.SETS ||
-    mode === FEED_ONLY_MODES.TRACKS ||
-    mode === FEED_ONLY_MODES.FREE_DOWNLOADS
-  ) {
-    return mode;
-  }
-  return "";
 }
 
 function setFeedOnlyMode(value, persist) {
@@ -765,7 +744,7 @@ function applyFilters() {
         clearWantButtons();
         collectAndApplyRatings(getTrackItems());
       }
-      if (barUi && barUi.meta) barUi.meta.textContent = "Nur im Feed aktiv";
+      if (barUi && barUi.meta) barUi.meta.textContent = "Filter nur auf /feed";
       return;
     }
     const filterChanged = syncFilterRevision();

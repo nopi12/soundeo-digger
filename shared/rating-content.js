@@ -70,8 +70,8 @@
   }
 
   function scoreTitle(rating) {
-    if (!rating) return "Digger 0";
-    const parts = ["Digger " + formatScore(rating.score)];
+    if (!rating) return "Bewertung: 0";
+    const parts = ["Bewertung: " + formatScore(rating.score)];
     if (rating.elapsedSec) parts.push(Math.round(Number(rating.elapsedSec)) + "s gehört");
     if (rating.downloads) parts.push(rating.downloads + " gekauft");
     if (rating.listens) parts.push(rating.listens + " positiv");
@@ -117,7 +117,7 @@
   function buildFromSignal(kind, key) {
     if (kind === "download") {
       return {
-        score: 5,
+        score: 100,
         users: 1,
         downloads: 1,
         listens: 0,

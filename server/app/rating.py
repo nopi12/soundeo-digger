@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
 from . import db as store
 
-DOWNLOAD_PTS = 5
-REPLAY_PTS = 1
+DOWNLOAD_PTS = 100
+REPLAY_PTS = 20
+LEGACY_LISTEN_PTS = 40
+LEGACY_SKIP_PTS = -50
 MIN_ELAPSED_SEC = 2.0
 FULL_LISTEN_SEC = 45.0
+POSITIVE_THRESHOLD = 20.0
+NEGATIVE_THRESHOLD = -20.0
 
 SIGNAL_KINDS = ("listen_time", "listen", "skip", "download", "undownload")
 
@@ -32,18 +37,40 @@ def listen_target_sec(duration_sec: float | int | None) -> float:
     return FULL_LISTEN_SEC
 
 
+def listen_target_sec(duration_sec: float | int | None) -> float:
+    dur = float(duration_sec or 0)
+    if dur > 30:
+        return min(FULL_LISTEN_SEC, dur * 0.35)
+    return FULL_LISTEN_SEC
+
+
 def listen_points(
     elapsed_sec: float | int | None,
     duration_sec: float | int | None = None,
 ) -> float:
-    """Fallback absolute curve when client points are unavailable."""
+    """Continuous tanh-log fallback when client points are unavailable."""
     elapsed = max(0.0, float(elapsed_sec or 0))
     if elapsed < MIN_ELAPSED_SEC:
         return 0.0
-    target = max(listen_target_sec(duration_sec), MIN_ELAPSED_SEC + 6.0)
-    span = max(target - MIN_ELAPSED_SEC, 1.0)
-    t = min(max(elapsed - MIN_ELAPSED_SEC, 0.0) / span, 1.0)
-    return round(-2.0 + 3.0 * t, 2)
+    z = math.log(max(elapsed, MIN_ELAPSED_SEC) / 12.0) * 0.55
+    tanh = math.tanh(z)
+    points = 48.0 * tanh
+    dur = float(duration_sec or 0)
+    if dur > 0:
+        pct = max(0.0, min(1.0, elapsed / dur))
+        points += 28.0 * pct * pct
+    return float(max(-100, min(100, round(points))))
+
+
+def coerce_stored_points(pts: float) -> int:
+    """Map legacy client scale [−2…+1] onto the new −100…+100 range."""
+    p = float(pts or 0)
+    if p == 0:
+        return 0
+    if -2.05 <= p <= 1.05:
+        t = (p - (-2.0)) / 3.0
+        return int(round(-48 + 96 * t))
+    return int(round(p))
 
 
 def user_contribution(
@@ -60,13 +87,13 @@ def user_contribution(
     if download_count > 0:
         score += DOWNLOAD_PTS
     elif best_listen_points != 0:
-        score += round(best_listen_points)
+        score += coerce_stored_points(best_listen_points)
     elif best_listen_sec >= MIN_ELAPSED_SEC:
-        score += round(listen_points(best_listen_sec, duration_sec))
+        score += int(round(listen_points(best_listen_sec, duration_sec)))
     elif listen_count > 0:
-        score += 1
+        score += LEGACY_LISTEN_PTS
     elif skip_count > 0:
-        score += -2
+        score += LEGACY_SKIP_PTS
     if play_count >= 2:
         score += REPLAY_PTS
     return int(score)
@@ -293,19 +320,24 @@ def compute_scores(conn: Any, track_ids: list[str]) -> dict[str, dict[str, Any]]
                 listen_count=listen_count,
             )
             score += user_score
+            coerced = (
+                coerce_stored_points(best_listen_points)
+                if best_listen_points != 0
+                else 0
+            )
             if download_count > 0:
                 download_users += 1
-            elif best_listen_points > 0.5 or listen_count > 0:
+            elif coerced > POSITIVE_THRESHOLD or listen_count > 0:
                 listen_users += 1
-            elif best_listen_points < -0.5 or (
+            elif coerced < NEGATIVE_THRESHOLD or (
                 skip_count > 0 and listen_count <= 0 and best_listen_sec <= 0
             ):
                 skip_users += 1
             elif best_listen_sec >= MIN_ELAPSED_SEC and best_listen_points == 0:
                 pts = listen_points(best_listen_sec, duration)
-                if pts > 0.5:
+                if pts > POSITIVE_THRESHOLD:
                     listen_users += 1
-                elif pts < -0.5:
+                elif pts < NEGATIVE_THRESHOLD:
                     skip_users += 1
         if not users:
             continue

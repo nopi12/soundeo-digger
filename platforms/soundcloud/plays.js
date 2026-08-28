@@ -16,18 +16,6 @@ function retirePlaysTimers() {
   clearTimeout(playsFilterModeSaveTimer);
 }
 
-function sanitizeMinPlays(value) {
-  const n = Math.floor(Number(value));
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.min(n, 999999999);
-}
-
-function sanitizePlaysFilterMode(value) {
-  const mode = String(value || "").trim();
-  if (mode === PLAYS_FILTER_MODES.MAX) return PLAYS_FILTER_MODES.MAX;
-  return PLAYS_FILTER_MODES.MIN;
-}
-
 function isPlaysMaxMode() {
   return state.playsFilterMode === PLAYS_FILTER_MODES.MAX;
 }

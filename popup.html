@@ -16,34 +16,25 @@
     <p class="subtitle" id="current-context">Öffne Soundeo oder SoundCloud</p>
   </header>
 
-  <section class="section sync-section">
-    <div class="section-head">
-      <h2>Cloud-Sync</h2>
-      <span class="badge" id="sync-badge">…</span>
-    </div>
-    <p class="hint" id="sync-hint">Hörverhalten geräteübergreifend + für Empfehlungen.</p>
-    <div class="sync-key-row">
-      <input type="text" id="sync-key" class="search" readonly spellcheck="false" />
-      <button type="button" class="btn btn-ghost" id="btn-sync-copy" title="Sync-Key kopieren">Kopieren</button>
-      <button type="button" class="btn btn-secondary" id="btn-sync-now" title="Jetzt synchronisieren">Sync</button>
-    </div>
-    <form class="sync-link-form" id="sync-link-form">
-      <input
-        type="text"
-        id="sync-key-input"
-        class="search"
-        placeholder="Sync-Key von anderem Gerät…"
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <button type="submit" class="btn btn-ghost">Verknüpfen</button>
-    </form>
-  </section>
+  <div class="dig-legend" id="dig-legend" hidden>
+    <span class="dig-legend-item">
+      <span class="dig-dot dig-dot-heard" aria-hidden="true"></span>
+      Gehört
+    </span>
+    <span class="dig-legend-item">
+      <span class="dig-dot dig-dot-want" aria-hidden="true"></span>
+      Vormerken
+    </span>
+    <span class="dig-legend-item">
+      <span class="dig-dot dig-dot-rate" aria-hidden="true"></span>
+      Bewertung
+    </span>
+  </div>
 
   <section class="section view" id="view-idle" hidden>
     <p class="idle-copy">
-      Öffne einen Tab auf <strong>soundeo.com</strong> oder <strong>soundcloud.com</strong>,
-      dann zeigt dieses Popup die passende View.
+      Öffne einen Tab auf <strong>soundeo.com</strong> oder <strong>soundcloud.com</strong> —
+      dann diggst du auf der Seite, und dieses Popup zeigt Setup &amp; Status.
     </p>
     <div class="idle-actions">
       <button type="button" class="btn btn-accent" id="btn-open-soundeo">Soundeo öffnen</button>
@@ -71,21 +62,21 @@
           </div>
           <div class="week-controls">
             <button type="button" class="btn btn-secondary" id="btn-last-week" title="Vorherige Woche">
-              ← Last Week
+              ← Vorherige
             </button>
             <button type="button" class="btn btn-secondary" id="btn-this-week" title="Aktuelle Woche">
-              This Week
+              Diese Woche
             </button>
             <button type="button" class="btn btn-secondary" id="btn-next-week" title="Nächste Woche">
-              Next Week →
+              Nächste →
             </button>
           </div>
           <div class="random-row">
-            <button type="button" class="btn btn-accent" id="btn-random-week">
-              Random Week
+            <button type="button" class="btn btn-accent" id="btn-random-week" title="Zufällige Woche">
+              Zufällige Woche
             </button>
-            <button type="button" class="btn btn-accent" id="btn-random-month">
-              Random Month
+            <button type="button" class="btn btn-accent" id="btn-random-month" title="Zufälliger Monat">
+              Zufälliger Monat
             </button>
             <label class="years-label">
               Letzte
@@ -93,6 +84,7 @@
               Jahre
             </label>
           </div>
+          <p class="hint">BPM &amp; Zufall auch im Overlay unten rechts auf der Seite.</p>
         </section>
 
         <section class="section">
@@ -129,21 +121,45 @@
             <label class="toggle">
               <input type="checkbox" id="hide-downloaded" />
               <span class="toggle-ui" aria-hidden="true"></span>
-              <span class="toggle-text">Bereits heruntergeladene ausblenden</span>
+              <span class="toggle-text">Heruntergeladene ausblenden</span>
             </label>
             <label class="toggle">
               <input type="checkbox" id="hide-listened" />
               <span class="toggle-ui" aria-hidden="true"></span>
-              <span class="toggle-text">Selbst getrackte Plays ausblenden</span>
+              <span class="toggle-text">Gehörte ausblenden</span>
             </label>
             <div class="played-meta">
-              <span id="played-count">0 Plays gespeichert</span>
-              <button type="button" class="btn btn-ghost" id="btn-clear-played" title="Gespeicherte Plays löschen">
+              <span id="played-count">0 gehört</span>
+              <button type="button" class="btn btn-ghost" id="btn-clear-played" title="Gehörte Tracks zurücksetzen">
                 Liste leeren
               </button>
             </div>
-            <p class="hint">Play = speichern. Bleibt sichtbar bis nächster Track oder 10 s. Alt+Klick = Play toggeln. Pro Track: ★ Favorit / ✕ blockieren.</p>
+            <p class="hint">
+              Auf der Seite: Abspielen = Gehört · <strong>Vormerken</strong> = später laden ·
+              <strong>WAV</strong> = sofort downloaden. Alt+Klick toggelt Gehört.
+            </p>
           </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <h2>Match-Dialog</h2>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="skip-match-prompts" />
+            <span class="toggle-ui" aria-hidden="true"></span>
+            <span class="toggle-text">Nicht mehr nach Track-Matches fragen</span>
+          </label>
+          <label class="field-label">
+            Nachfrage ab Ähnlichkeit
+            <select id="match-min-score" class="select">
+              <option value="0">Alle unsicheren</option>
+              <option value="0.6">60 %</option>
+              <option value="0.75">75 %</option>
+              <option value="0.85">85 %</option>
+            </select>
+          </label>
+          <p class="hint">Schwächere Treffer werden still ignoriert.</p>
         </section>
 
         <section class="section scroll-section">
@@ -176,7 +192,7 @@
               <button type="submit" class="btn btn-ghost">✕</button>
             </form>
           </div>
-          <p class="hint">Pro Track ★ / ✕ anklicken, oder hier Namen eintragen. Blockierte Artists verschwinden; Favoriten werden grün hervorgehoben.</p>
+          <p class="hint">Auf der Seite ★ / ✕ am Track, oder hier Namen eintragen.</p>
         </section>
       </div>
 
@@ -186,66 +202,94 @@
   <div class="view" id="view-soundcloud" hidden>
     <section class="section">
       <div class="section-head">
-        <h2>Titel-Filter</h2>
-        <span class="badge" id="sc-filter-badge">aus</span>
+        <h2>Diggen auf der Seite</h2>
       </div>
-      <div class="sc-filter-row">
-        <input
-          type="search"
-          id="sc-title-filter"
-          class="search sc-filter-input"
-          placeholder="Nur Titel mit…"
-          autocomplete="off"
-        />
-        <button type="button" class="btn btn-ghost" id="btn-sc-filter-clear">Leeren</button>
-      </div>
-      <p class="hint">
-        Blendet Stream-/Listen-Einträge aus, deren Track-Titel den Text nicht enthalten.
-        Wirkt live auf der Seite (auch beim Nachladen).
+      <p class="hint page-control-hint">
+        Titel-Filter, Tempo, Plays, Auto-Nachladen und „Nur anzeigen“ steuerst du in der
+        Digger-Leiste links auf der Seite — nicht hier.
       </p>
+      <ul class="status-list" id="sc-status-list">
+        <li><span class="status-label">Titel-Filter</span> <span class="status-value" id="sc-status-filter">aus</span></li>
+        <li><span class="status-label">Tempo</span> <span class="status-value" id="sc-status-rate">0%</span></li>
+        <li><span class="status-label">Gehört</span> <span class="status-value" id="sc-played-count">0</span></li>
+      </ul>
     </section>
 
     <section class="section">
       <div class="section-head">
-        <h2>Relatives Tempo</h2>
-        <span class="badge" id="sc-rate-label">0%</span>
-      </div>
-      <div class="tempo-row">
-        <span class="tempo-bound">−20%</span>
-        <input type="range" id="sc-rate-slider" class="tempo-slider" min="-20" max="20" step="1" value="0" />
-        <span class="tempo-bound">+20%</span>
-      </div>
-      <div class="tempo-actions">
-        <button type="button" class="btn btn-ghost" id="btn-sc-rate-reset">Reset 0%</button>
-      </div>
-      <p class="hint">
-        Relative Geschwindigkeit (±20 %) mit Re-Pitch. Kein Target-BPM — SoundCloud liefert
-        dafür meist keine BPM.
-      </p>
-    </section>
-
-    <section class="section">
-      <div class="section-head">
-        <h2>Gehörte Tracks</h2>
+        <h2>Standard-Filter</h2>
       </div>
       <div class="toggle-stack">
         <label class="toggle">
           <input type="checkbox" id="sc-hide-listened" />
           <span class="toggle-ui" aria-hidden="true"></span>
-          <span class="toggle-text">Selbst getrackte Plays ausblenden</span>
+          <span class="toggle-text">Gehörte ausblenden</span>
         </label>
         <div class="played-meta">
-          <span id="sc-played-count">0 Plays gespeichert</span>
-          <button type="button" class="btn btn-ghost" id="btn-sc-clear-played" title="Gespeicherte Plays löschen">
-            Liste leeren
+          <button type="button" class="btn btn-ghost" id="btn-sc-clear-played" title="Gehörte Tracks zurücksetzen">
+            Gehörte leeren
           </button>
         </div>
-        <p class="hint">Play = speichern. Aktueller Track bleibt sichtbar. Alt+Klick auf einen Eintrag = Play toggeln.</p>
+        <p class="hint">Gilt plattformübergreifend. Live-Steuerung bleibt auf der Seite.</p>
       </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Match-Dialog</h2>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="sc-skip-match-prompts" />
+        <span class="toggle-ui" aria-hidden="true"></span>
+        <span class="toggle-text">Nicht mehr nach Track-Matches fragen</span>
+      </label>
+      <label class="field-label">
+        Nachfrage ab Ähnlichkeit
+        <select id="sc-match-min-score" class="select">
+          <option value="0">Alle unsicheren</option>
+          <option value="0.6">60 %</option>
+          <option value="0.75">75 %</option>
+          <option value="0.85">85 %</option>
+        </select>
+      </label>
+      <p class="hint">Schwächere Treffer werden still ignoriert.</p>
     </section>
   </div>
 
+  <section class="section sync-section" id="sync-section">
+    <div class="section-head">
+      <h2>Geräte-Sync</h2>
+      <span class="badge" id="sync-badge">…</span>
+    </div>
+    <p class="hint" id="sync-hint">Gehört, Vormerken und Bewertungen geräteübergreifend.</p>
+    <div class="sync-actions">
+      <button type="button" class="btn btn-secondary" id="btn-sync-now" title="Jetzt synchronisieren">
+        Jetzt syncen
+      </button>
+    </div>
+    <details class="sync-details" id="sync-details">
+      <summary>Gerät verknüpfen / Key</summary>
+      <div class="sync-key-row">
+        <input type="text" id="sync-key" class="search" readonly spellcheck="false" />
+        <button type="button" class="btn btn-ghost" id="btn-sync-copy" title="Sync-Key kopieren">Kopieren</button>
+      </div>
+      <form class="sync-link-form" id="sync-link-form">
+        <input
+          type="text"
+          id="sync-key-input"
+          class="search"
+          placeholder="Key von anderem Gerät…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button type="submit" class="btn btn-ghost">Verknüpfen</button>
+      </form>
+    </details>
+  </section>
+
   <script src="genres.js"></script>
+  <script src="shared/sanitize.js"></script>
+  <script src="shared/onboarding.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

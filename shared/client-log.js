@@ -3,7 +3,15 @@
  * Loaded via importScripts after listen-sync.js (uses its helpers).
  */
 const CLIENT_LOG_QUEUE_KEY = "diggerClientLogQueue";
-const CLIENT_LOG_EXT_VERSION = "1.19.1";
+
+function getClientLogExtVersion() {
+  if (typeof getExtVersion === "function") return getExtVersion();
+  try {
+    return chrome.runtime.getManifest().version || "0";
+  } catch (_) {
+    return "0";
+  }
+}
 
 let clientLogFlushTimer = null;
 let clientLogInFlight = false;
@@ -38,7 +46,7 @@ function normalizeClientLog(entry) {
     message: message,
     source: String(entry.source || "extension").slice(0, 64),
     platform: String(entry.platform || "").slice(0, 32),
-    extVersion: String(entry.extVersion || CLIENT_LOG_EXT_VERSION).slice(0, 32),
+    extVersion: String(entry.extVersion || getClientLogExtVersion()).slice(0, 32),
     stack: String(entry.stack || "").slice(0, 4000),
     url: String(entry.url || "").slice(0, 500),
     ts: Number(entry.ts) || clientLogNowSec(),
@@ -128,7 +136,7 @@ function reportClientLog(level, message, extras) {
     stack: extra.stack || "",
     url: extra.url || "",
     context: extra.context || null,
-    extVersion: extra.extVersion || CLIENT_LOG_EXT_VERSION,
+    extVersion: extra.extVersion || getClientLogExtVersion(),
     ts: clientLogNowSec()
   });
 }

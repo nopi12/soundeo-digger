@@ -156,7 +156,7 @@ function retireAutoLoad() {
 function formatAutoLoadStatus() {
   if (!autoLoad.enabled) {
     return isFeedPage()
-      ? "Feed scrollen lassen (Hintergrund)"
+      ? "Feed nachladen (Hintergrund)"
       : "Nur auf /feed verfügbar";
   }
   const count = getCachedFeedItemCount() || getTrackItems().length;

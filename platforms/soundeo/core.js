@@ -5,7 +5,8 @@ const PLAYED_ATTR = "data-soundeo-digger-played";
 const FAV_ARTIST_ATTR = "data-soundeo-digger-fav-artist";
 const RATE_ATTR = "data-digger-rate";
 const SKIP_SECONDS = 30;
-const EXT_VERSION = "1.23.0";
+const EXT_VERSION =
+  typeof getExtVersion === "function" ? getExtVersion() : "1.26.0";
 const RATE_MIN = 0.8;
 const RATE_MAX = 1.2;
 const DEFAULT_TARGET_BPM = 120;
@@ -461,12 +462,6 @@ function sendToBackground(message) {
       resolve(null);
     }
   });
-}
-
-function clampRate(rate) {
-  const n = Number(rate);
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(RATE_MAX, Math.max(RATE_MIN, n));
 }
 
 function rateToOffset(rate) {

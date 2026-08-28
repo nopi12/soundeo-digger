@@ -84,6 +84,7 @@ async function loadState() {
       Boolean(document.getElementById(BAR_ID))
   );
   if (window.DiggerClientLog) window.DiggerClientLog.install("soundcloud");
+  if (window.DiggerOnboarding) window.DiggerOnboarding.show("soundcloud");
 }
 
 try {

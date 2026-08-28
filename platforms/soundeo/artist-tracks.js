@@ -267,7 +267,7 @@ async function openArtistTracksPanel(item, btn) {
     return;
   }
 
-  if (titleEl) titleEl.textContent = "Tracks by " + info.name;
+  if (titleEl) titleEl.textContent = "Tracks von " + info.name;
   if (countEl) {
     if (info.trackCount != null) {
       countEl.textContent = String(info.trackCount);
@@ -330,7 +330,7 @@ function ensureArtistTracksButton(item, bar) {
     btn.className = "sd-artist-btn sd-artist-tracks";
     btn.title = "Weitere Tracks vom Artist";
     btn.setAttribute("aria-label", "Weitere Tracks vom Artist");
-    btn.textContent = "♫";
+    btn.textContent = "Artist";
     btn.addEventListener(
       "click",
       function (e) {
@@ -342,4 +342,5 @@ function ensureArtistTracksButton(item, bar) {
     );
     bar.appendChild(btn);
   }
+  btn.textContent = "Artist";
 }

@@ -277,7 +277,7 @@ function goRandomWeek() {
   const genreFilter = buildActiveGenreFilter();
   const url = buildTop100UrlWithTimeFilter(timeFilter, genreFilter);
   if (tempoUi && tempoUi.meta) {
-    tempoUi.meta.textContent = "Random Week · " + shortGenreName(genreNameForFilter(genreFilter));
+    tempoUi.meta.textContent = "Zufällige Woche · " + shortGenreName(genreNameForFilter(genreFilter));
   }
   window.location.assign(url);
 }
@@ -288,7 +288,7 @@ function goRandomMonth() {
   const genreFilter = buildActiveGenreFilter();
   const url = buildTop100UrlWithTimeFilter(timeFilter, genreFilter);
   if (tempoUi && tempoUi.meta) {
-    tempoUi.meta.textContent = "Random Month · " + shortGenreName(genreNameForFilter(genreFilter));
+    tempoUi.meta.textContent = "Zufälliger Monat · " + shortGenreName(genreNameForFilter(genreFilter));
   }
   window.location.assign(url);
 }

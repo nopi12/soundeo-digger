@@ -1,47 +1,51 @@
 # Digger
 
-Chrome Extension zum schnelleren Diggen auf [Soundeo](https://soundeo.com) und [SoundCloud](https://soundcloud.com).
+Chrome-Extension (MV3) zum schnelleren Diggen auf [Soundeo](https://soundeo.com) und [SoundCloud](https://soundcloud.com).
 
-Das Popup zeigt je nach aktivem Tab die passende Platform-View.
+**Idee:** Diggen auf der Seite, Defaults & Sync im Popup — eine Sprache (DE), drei Track-Zustände: **Gehört · Vormerken · Bewertung**.
 
 ## Struktur
 
 ```
-shared/page-hook.js          # playbackRate-Hook (MAIN world)
-platforms/soundeo/           # Charts, Artists, Target-BPM, Filters
-platforms/soundcloud/        # Relatives Tempo + Titel-Filter
-background.js                # Storage + Broadcast
-popup.*                      # Tab-abhängige UI
+shared/                  # Sync, Match-Modal, Sanitize, Rating, Logging
+platforms/soundeo/       # Charts, Artists, Target-BPM, Overlay
+platforms/soundcloud/    # Feed-Leiste, Tempo, Filter, Plays, Auto-Nachladen
+background.js            # Storage + Broadcast + Geräte-Sync
+popup.*                  # Setup & Status (tababhängig)
 ```
 
 ## Features
 
-### Soundeo
-- **Genre-Wechsel** – All Genres oder einzelnes Genre → Top 100 Charts
-- **Favoriten** – Genres mit ★ merken (sync über Chrome-Profil)
-- **Woche navigieren** – Last Week / This Week / Next Week
-- **Random Week / Random Month** – Zufällige Woche oder Kalendermonat aus den letzten X Jahren
-- **Downloads / Plays ausblenden**
-- **Preview-BPM** – Ziel-BPM (80–160) mit Re-Pitch (±20 %)
-- **Artists blockieren / favorisieren**
+### Gemeinsam
+- **Geräte-Sync** – Gehört / Vormerken / Ratings geräteübergreifend (Key unter „Gerät verknüpfen“)
+- **Gehört** – Abspielen markiert Tracks; optional ausblenden
+- **Vormerken** – Später laden (Soundeo ⬇ vs. ↓ WAV-Download)
+- **Bewertung** – Score aus Hörverhalten (Tooltip am Stern)
+- **Match-Dialog** – Unklare Cross-Platform-Treffer bestätigen; „Nicht mehr fragen“ möglich
 
-### SoundCloud
-- **Titel-Filter** – Stream-/Listen-Einträge ausblenden, deren Titel den Suchtext nicht enthalten
-- **Relatives Tempo** – Speed ±20 % mit Re-Pitch (kein Target-BPM)
+### Soundeo (Popup + Overlay)
+- Genre-Wechsel & Favoriten, Wochen-Navigation, Zufällige Woche/Monat
+- Heruntergeladene / Gehörte ausblenden, Artists favorisieren / blockieren
+- Preview-BPM (80–160) mit Re-Pitch im Seiten-Overlay
+
+### SoundCloud (Seiten-Leiste)
+- Titel-Filter, relatives Tempo (±20 %), Gehörte ausblenden
+- Plays-Filter (Min/Max), „Nur anzeigen“ (Sets / Tracks / Free DL) — **nur auf `/feed`**
+- Auto-Nachladen im Feed
+- Perf-Panel nur mit `localStorage.diggerDebug = "1"` oder `?diggerDebug=1`
 
 ## Installation (unpacked)
 
-1. Chrome öffnen → `chrome://extensions`
+1. Chrome → `chrome://extensions`
 2. **Entwicklermodus** aktivieren
-3. **Entpackte Erweiterung laden**
-4. Diesen Ordner auswählen
-5. Nach Updates: Extension neu laden
+3. **Entpackte Erweiterung laden** → diesen Ordner
+4. Nach Updates: Extension neu laden
 
 ## Nutzung
 
 1. Tab auf `soundeo.com` oder `soundcloud.com` öffnen
-2. Extension-Icon klicken → passende View erscheint
-3. SoundCloud: Filter/Speed auch als Overlay unten rechts auf der Seite
+2. Dig-Steuerung auf der Seite; Popup für Sync, Genres, Filter-Defaults
+3. Zweites Gerät: Sync-Key unter Geräte-Sync → „Gerät verknüpfen“ kopieren/einfügen
 
 ## Soundeo URL-Logik
 

@@ -83,8 +83,8 @@ function syncWantButton(item) {
   btn.classList.toggle("sc-button-selected", wanted);
   btn.textContent = wanted ? "Vorgemerkt" : "Vormerken";
   btn.title = wanted
-    ? "Download-Vormerkung entfernen"
-    : "Zum baldigen Download vormerken";
+    ? "Vormerken entfernen"
+    : "Vormerken (später laden)";
   btn.setAttribute("aria-pressed", wanted ? "true" : "false");
 }
 

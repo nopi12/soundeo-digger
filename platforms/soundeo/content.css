@@ -13,6 +13,14 @@ html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
   filter: grayscale(1);
 }
 
+.trackitem[data-soundeo-digger-want] {
+  box-shadow: inset 3px 0 0 #ff6a3d;
+}
+
+.trackitem[data-soundeo-digger-want][data-soundeo-digger-fav-artist] {
+  box-shadow: inset 3px 0 0 #3dcf91, inset 7px 0 0 #ff6a3d;
+}
+
 .trackitem > .sd-digger-score {
   float: right;
   display: inline-flex;
@@ -122,42 +130,30 @@ html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
   top: 50%;
   transform: translateY(-50%);
   z-index: 2;
-  display: grid;
-  grid-template-columns: repeat(3, 24px);
-  grid-template-rows: repeat(2, 24px);
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 4px;
   margin: 0;
   flex-shrink: 0;
 }
 
-.sd-artist-fav {
-  grid-row: 1;
-  grid-column: 1;
-}
-
-.sd-artist-block {
-  grid-row: 1;
-  grid-column: 2;
-}
-
-.sd-artist-download {
-  grid-row: 1;
-  grid-column: 3;
-}
-
-.sd-artist-tracks {
-  grid-row: 2;
-  grid-column: 1;
-}
-
-.sd-label-tracks {
-  grid-row: 2;
-  grid-column: 2;
+.sd-artist-actions-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: #d0d7e0;
+  flex-shrink: 0;
 }
 
 .sd-artist-want {
-  grid-row: 2;
-  grid-column: 3;
+  width: auto;
+  min-width: 72px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .sd-artist-want:hover {
@@ -180,12 +176,12 @@ html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
 
 .trackitem:has(> .sd-artist-actions) {
   position: relative;
-  padding-right: 168px;
+  padding-right: 360px;
 }
 
 .trackitem .sd-artist-tracks-list .trackitem:has(> .sd-artist-actions),
 .trackitem .sd-label-tracks-list .trackitem:has(> .sd-artist-actions) {
-  padding-right: 168px;
+  padding-right: 360px;
 }
 
 .sd-artist-btn {
@@ -225,6 +221,15 @@ html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
   background: rgba(224, 90, 43, 0.1);
 }
 
+.sd-artist-download {
+  width: auto;
+  min-width: 36px;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .sd-artist-download:hover {
   color: #2563eb;
   border-color: rgba(37, 99, 235, 0.55);
@@ -235,6 +240,17 @@ html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
   color: #2563eb;
   border-color: rgba(37, 99, 235, 0.35);
   background: rgba(37, 99, 235, 0.08);
+}
+
+.sd-artist-tracks,
+.sd-label-tracks {
+  width: auto;
+  min-width: 40px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .sd-artist-tracks:hover,
@@ -725,5 +741,20 @@ html.soundeo-digger-hide-downloaded .trackitem:has(.download.downloaded) {
 .digger-match-btn-yes:hover:not(:disabled) {
   background: rgba(255, 106, 61, 0.34);
   color: #ffd0bc;
+}
+
+.digger-match-skip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+  font-size: 12px;
+  color: #8b97a8;
+  cursor: pointer;
+  user-select: none;
+}
+
+.digger-match-skip-input {
+  margin: 0;
 }
 

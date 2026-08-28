@@ -74,7 +74,7 @@ function injectTempoWidget() {
 
   const genreLabel = document.createElement("span");
   genreLabel.className = "sd-genre-label";
-  genreLabel.textContent = "Random-Genres";
+  genreLabel.textContent = "Zufalls-Genres";
 
   const genreCount = document.createElement("span");
   genreCount.className = "sd-genre-count";
@@ -123,8 +123,8 @@ function injectTempoWidget() {
   const randomBtn = document.createElement("button");
   randomBtn.type = "button";
   randomBtn.className = "sd-random-week-btn";
-  randomBtn.textContent = "Random Week";
-  randomBtn.title = "Zufällige Woche · alle aktiven Genres im Filter";
+  randomBtn.textContent = "Zufällige Woche";
+  randomBtn.title = "Zufällige Woche · aktive Genres im Filter";
   randomBtn.addEventListener("click", function (e) {
     e.preventDefault();
     e.stopPropagation();
@@ -134,8 +134,8 @@ function injectTempoWidget() {
   const randomMonthBtn = document.createElement("button");
   randomMonthBtn.type = "button";
   randomMonthBtn.className = "sd-random-month-btn";
-  randomMonthBtn.textContent = "Random Month";
-  randomMonthBtn.title = "Zufälliger Monat · alle aktiven Genres im Filter";
+  randomMonthBtn.textContent = "Zufälliger Monat";
+  randomMonthBtn.title = "Zufälliger Monat · aktive Genres im Filter";
   randomMonthBtn.addEventListener("click", function (e) {
     e.preventDefault();
     e.stopPropagation();

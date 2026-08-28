@@ -28,8 +28,8 @@ function updateBarUi() {
     }
     if (panelUi && panelUi.scopeHint) {
       panelUi.scopeHint.textContent = isFeedPage()
-        ? "Gilt nur auf der Feed-Seite"
-        : "Auf der Feed-Seite verfügbar";
+        ? "Erneut auf eine Kategorie tippen = alle anzeigen."
+        : "Nur auf der Feed-Seite aktiv — öffne soundcloud.com/feed";
     }
     if (playsPanelUi && playsPanelUi.minPlaysInput) {
       const nextValue = state.minPlays > 0 ? String(state.minPlays) : "";
@@ -53,11 +53,6 @@ function updateBarUi() {
       playsPanelUi.modeMinBtn.setAttribute("aria-pressed", isMax ? "false" : "true");
       playsPanelUi.modeMaxBtn.setAttribute("aria-pressed", isMax ? "true" : "false");
     }
-    if (playsPanelUi && playsPanelUi.scopeHint) {
-      playsPanelUi.scopeHint.textContent = isFeedPage()
-        ? "Gilt nur auf der Feed-Seite"
-        : "Auf der Feed-Seite verfügbar";
-    }
     syncOverlayLayout();
     updateAutoLoadUi();
     scheduleDebugPerfRefresh();
@@ -66,23 +61,86 @@ function updateBarUi() {
 
 function syncOverlayLayout() {
   const bar = document.getElementById(BAR_ID);
-  const panel = document.getElementById(PANEL_ID);
-  const playsPanel = document.getElementById(PLAYS_PANEL_ID);
-  const gap = 12;
+  const gap = 8;
   if (bar) {
     const top = bar.getBoundingClientRect().bottom + gap;
     document.documentElement.style.setProperty("--digger-sc-panel-top", Math.round(top) + "px");
   }
-  if (panel && panel.style.display !== "none") {
-    const panelTop = panel.getBoundingClientRect().bottom + gap;
-    document.documentElement.style.setProperty(
-      "--digger-sc-plays-panel-top",
-      Math.round(panelTop) + "px"
-    );
-  } else if (bar && playsPanel) {
-    const top = bar.getBoundingClientRect().bottom + gap;
-    document.documentElement.style.setProperty("--digger-sc-plays-panel-top", Math.round(top) + "px");
+}
+
+const SC_DOCK_COLLAPSED_KEY = "diggerScDockCollapsed";
+
+function isScDockCollapsed() {
+  try {
+    return document.documentElement.classList.contains("digger-sc-dock-collapsed");
+  } catch (_) {
+    return false;
   }
+}
+
+function setScDockCollapsed(collapsed) {
+  const next = Boolean(collapsed);
+  try {
+    document.documentElement.classList.toggle("digger-sc-dock-collapsed", next);
+    sessionStorage.setItem(SC_DOCK_COLLAPSED_KEY, next ? "1" : "0");
+  } catch (_) {}
+  const bar = document.getElementById(BAR_ID);
+  if (bar) {
+    bar.classList.toggle("is-collapsed", next);
+    const toggle = bar.querySelector(".digger-sc-dock-toggle");
+    if (toggle) {
+      toggle.textContent = next ? "Diggen" : "Einklappen";
+      toggle.setAttribute("aria-expanded", next ? "false" : "true");
+      toggle.title = next ? "Digger-Leiste ausklappen" : "Digger-Leiste einklappen";
+    }
+  }
+  const panel = document.getElementById(PANEL_ID);
+  if (panel) panel.classList.toggle("is-dock-collapsed", next);
+  removeLegacyPlaysPanel();
+  syncOverlayLayout();
+}
+
+function ensureScDockCollapsedState() {
+  let collapsed = false;
+  try {
+    const saved = sessionStorage.getItem(SC_DOCK_COLLAPSED_KEY);
+    if (saved === "1") collapsed = true;
+    else if (saved == null && window.matchMedia && window.matchMedia("(max-width: 1180px)").matches) {
+      collapsed = true;
+    }
+  } catch (_) {}
+  setScDockCollapsed(collapsed);
+}
+
+function ensureDockToggle(root) {
+  if (!root) return null;
+  let head = root.querySelector(".digger-sc-bar-head");
+  if (!head) {
+    head = document.createElement("div");
+    head.className = "digger-sc-bar-head";
+    const title = root.querySelector(".digger-sc-bar-title");
+    if (title) head.appendChild(title);
+    else {
+      const label = document.createElement("span");
+      label.className = "digger-sc-bar-title";
+      label.textContent = "Digger";
+      head.appendChild(label);
+    }
+    root.insertBefore(head, root.firstChild);
+  }
+  let toggle = head.querySelector(".digger-sc-dock-toggle");
+  if (!toggle) {
+    toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "digger-sc-dock-toggle";
+    toggle.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setScDockCollapsed(!isScDockCollapsed());
+    });
+    head.appendChild(toggle);
+  }
+  return toggle;
 }
 
 function ensureOverlayLayoutListener() {
@@ -113,11 +171,12 @@ function ensureFeedBar() {
     if (existing.parentNode !== document.body) {
       document.body.appendChild(existing);
     }
-    if (!barUi || existing.dataset.wired !== "bar6") {
-      if (existing.dataset.wired !== "bar6") {
+    if (!barUi || existing.dataset.wired !== "bar7") {
+      if (existing.dataset.wired !== "bar7") {
         ensureAutoLoadBarSection(existing);
         ensureHideListenedBarSection(existing);
-        existing.dataset.wired = "bar6";
+        ensureDockToggle(existing);
+        existing.dataset.wired = "bar7";
       }
       bindBar(existing);
     }
@@ -132,46 +191,6 @@ function ensureFeedBar() {
     injectFeedBar();
   } finally {
     feedBarInjecting = false;
-  }
-}
-
-function ensureSidePanel() {
-  if (dead) return;
-  dedupeOverlays();
-  const existing = document.getElementById(PANEL_ID);
-  if (!isFeedPage()) {
-    if (existing) existing.style.display = "none";
-    return;
-  }
-  if (existing) {
-    existing.style.display = "";
-    if (existing.dataset.wired !== "panel9") {
-      try {
-        existing.remove();
-      } catch (_) {}
-      panelUi = null;
-      if (sidePanelInjecting) return;
-      sidePanelInjecting = true;
-      try {
-        injectSidePanel();
-      } finally {
-        sidePanelInjecting = false;
-      }
-      return;
-    }
-    if (!panelUi || panelNeedsRewire(existing)) {
-      bindSidePanel(existing);
-    }
-    syncOverlayLayout();
-    return;
-  }
-
-  if (sidePanelInjecting) return;
-  sidePanelInjecting = true;
-  try {
-    injectSidePanel();
-  } finally {
-    sidePanelInjecting = false;
   }
 }
 
@@ -190,6 +209,7 @@ function createHideListenedSection() {
   const text = document.createElement("span");
   text.className = "digger-sc-hide-listened-text";
   text.textContent = "Gehörte ausblenden";
+  text.title = "Tracks mit Status Gehört ausblenden";
 
   label.appendChild(input);
   label.appendChild(ui);
@@ -214,12 +234,13 @@ function createAutoLoadSection() {
   const autoLoadBtn = document.createElement("button");
   autoLoadBtn.type = "button";
   autoLoadBtn.className = "digger-sc-autoload-btn";
-  autoLoadBtn.textContent = "Auto-Load";
+  autoLoadBtn.textContent = "Auto-Nachladen";
   autoLoadBtn.setAttribute("aria-pressed", "false");
+  autoLoadBtn.title = "Automatisch ans Feed-Ende springen und nachladen";
 
   const autoLoadStatus = document.createElement("span");
   autoLoadStatus.className = "digger-sc-autoload-status";
-  autoLoadStatus.textContent = "Feed scrollen lassen (Hintergrund)";
+  autoLoadStatus.textContent = "Nur auf der Feed-Seite";
 
   wrap.appendChild(autoLoadBtn);
   wrap.appendChild(autoLoadStatus);
@@ -269,6 +290,7 @@ function ensureAutoLoadBarSection(root) {
 function bindBar(root) {
   ensureAutoLoadBarSection(root);
   ensureHideListenedBarSection(root);
+  ensureDockToggle(root);
   barUi = {
     filterInput: root.querySelector(".digger-sc-filter-input"),
     clearBtn: root.querySelector(".digger-sc-clear-btn"),
@@ -278,7 +300,8 @@ function bindBar(root) {
     autoLoadBtn: root.querySelector(".digger-sc-autoload-btn"),
     autoLoadStatus: root.querySelector(".digger-sc-autoload-status"),
     hideListenedInput: root.querySelector(".digger-sc-hide-listened-input"),
-    meta: root.querySelector(".digger-sc-meta")
+    meta: root.querySelector(".digger-sc-meta"),
+    dockToggle: root.querySelector(".digger-sc-dock-toggle")
   };
   wireHideListenedSection({
     input: barUi.hideListenedInput
@@ -288,7 +311,17 @@ function bindBar(root) {
     status: barUi.autoLoadStatus
   });
   wireIsolation(root);
+  ensureScDockCollapsedState();
   updateBarUi();
+}
+
+function removeLegacyPlaysPanel() {
+  const legacy = document.getElementById(PLAYS_PANEL_ID);
+  if (!legacy) return;
+  try {
+    legacy.remove();
+  } catch (_) {}
+  playsPanelUi = null;
 }
 
 function bindSidePanel(root) {
@@ -307,22 +340,154 @@ function bindSidePanel(root) {
       : null,
     scopeHint: root.querySelector(".digger-sc-panel-hint")
   };
+  bindPlaysSection(root);
   wireSidePanelEvents(root);
   wireIsolation(root);
   updateBarUi();
   syncOverlayLayout();
 }
 
+function bindPlaysSection(root) {
+  const section = root && root.querySelector(".digger-sc-plays-section");
+  if (!section) {
+    playsPanelUi = null;
+    return;
+  }
+  playsPanelUi = {
+    minPlaysInput: section.querySelector(".digger-sc-min-plays-input"),
+    clearBtn: section.querySelector(".digger-sc-plays-clear-btn"),
+    valueLabel: section.querySelector(".digger-sc-plays-value"),
+    intro: section.querySelector(".digger-sc-plays-intro"),
+    modeMinBtn: section.querySelector(".digger-sc-plays-mode-min"),
+    modeMaxBtn: section.querySelector(".digger-sc-plays-mode-max"),
+    scopeHint: root.querySelector(".digger-sc-panel-hint")
+  };
+  if (playsPanelUi.modeMinBtn && playsPanelUi.modeMinBtn.dataset.wired !== "1") {
+    playsPanelUi.modeMinBtn.dataset.wired = "1";
+    playsPanelUi.modeMinBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setPlaysFilterMode(PLAYS_FILTER_MODES.MIN, true);
+    });
+  }
+  if (playsPanelUi.modeMaxBtn && playsPanelUi.modeMaxBtn.dataset.wired !== "1") {
+    playsPanelUi.modeMaxBtn.dataset.wired = "1";
+    playsPanelUi.modeMaxBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setPlaysFilterMode(PLAYS_FILTER_MODES.MAX, true);
+    });
+  }
+  if (playsPanelUi.minPlaysInput && playsPanelUi.minPlaysInput.dataset.wired !== "1") {
+    playsPanelUi.minPlaysInput.dataset.wired = "1";
+    playsPanelUi.minPlaysInput.addEventListener("input", function () {
+      setMinPlays(playsPanelUi.minPlaysInput.value, true);
+    });
+  }
+  if (playsPanelUi.clearBtn && playsPanelUi.clearBtn.dataset.wired !== "1") {
+    playsPanelUi.clearBtn.dataset.wired = "1";
+    playsPanelUi.clearBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setMinPlays(0, true);
+      if (playsPanelUi.minPlaysInput) {
+        playsPanelUi.minPlaysInput.value = "";
+        playsPanelUi.minPlaysInput.focus();
+      }
+    });
+  }
+  section.querySelectorAll(".digger-sc-plays-preset-btn").forEach(function (btn) {
+    if (btn.dataset.wired === "1") return;
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const amount = Number(btn.getAttribute("data-plays")) || 0;
+      setMinPlays(amount, true);
+      if (playsPanelUi && playsPanelUi.minPlaysInput) {
+        playsPanelUi.minPlaysInput.value = String(amount);
+        playsPanelUi.minPlaysInput.focus();
+      }
+    });
+  });
+}
+
+function ensureSidePanel() {
+  if (dead) return;
+  dedupeOverlays();
+  removeLegacyPlaysPanel();
+  const existing = document.getElementById(PANEL_ID);
+  if (!isFeedPage()) {
+    if (existing) existing.style.display = "none";
+    return;
+  }
+  if (existing) {
+    existing.style.display = "";
+    if (existing.dataset.wired !== "panel11") {
+      try {
+        existing.remove();
+      } catch (_) {}
+      panelUi = null;
+      playsPanelUi = null;
+      if (sidePanelInjecting) return;
+      sidePanelInjecting = true;
+      try {
+        injectSidePanel();
+      } finally {
+        sidePanelInjecting = false;
+      }
+      return;
+    }
+    if (!panelUi || panelNeedsRewire(existing) || !existing.querySelector(".digger-sc-plays-section")) {
+      bindSidePanel(existing);
+    }
+    syncOverlayLayout();
+    return;
+  }
+
+  if (sidePanelInjecting) return;
+  sidePanelInjecting = true;
+  try {
+    injectSidePanel();
+  } finally {
+    sidePanelInjecting = false;
+  }
+}
+
+function ensurePlaysPanel() {
+  removeLegacyPlaysPanel();
+  const panel = document.getElementById(PANEL_ID);
+  if (panel && isFeedPage() && !playsPanelUi) bindPlaysSection(panel);
+}
+
 function injectFeedBar() {
   ensureIsolatedForm();
   const root = document.createElement("div");
   root.id = BAR_ID;
-  root.dataset.wired = "bar6";
+  root.dataset.wired = "bar7";
   root.dataset.diggerScBar = "1";
+
+  const head = document.createElement("div");
+  head.className = "digger-sc-bar-head";
 
   const label = document.createElement("span");
   label.className = "digger-sc-bar-title";
   label.textContent = "Digger";
+
+  const dockToggle = document.createElement("button");
+  dockToggle.type = "button";
+  dockToggle.className = "digger-sc-dock-toggle";
+  dockToggle.textContent = "Einklappen";
+  dockToggle.setAttribute("aria-expanded", "true");
+  dockToggle.title = "Digger-Leiste einklappen";
+  dockToggle.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setScDockCollapsed(!isScDockCollapsed());
+  });
+
+  head.appendChild(label);
+  head.appendChild(dockToggle);
 
   const filterInput = document.createElement("input");
   filterInput.type = "search";
@@ -343,7 +508,8 @@ function injectFeedBar() {
 
   const speedLabel = document.createElement("span");
   speedLabel.className = "digger-sc-speed-label";
-  speedLabel.textContent = "Speed";
+  speedLabel.textContent = "Tempo";
+  speedLabel.title = "Relatives Tempo (±20 %)";
 
   const speedControls = document.createElement("div");
   speedControls.className = "digger-sc-speed-controls";
@@ -365,14 +531,14 @@ function injectFeedBar() {
   resetBtn.type = "button";
   resetBtn.className = "digger-sc-reset-btn";
   resetBtn.textContent = "0%";
-  resetBtn.title = "Speed zurücksetzen";
+  resetBtn.title = "Tempo zurücksetzen";
 
   const autoLoadSection = createAutoLoadSection();
   const hideListenedSection = createHideListenedSection();
 
   const meta = document.createElement("span");
   meta.className = "digger-sc-meta";
-  meta.textContent = "Feed filtern";
+  meta.textContent = isFeedPage() ? "Feed filtern" : "Gilt vor allem im Feed";
 
   speedControls.appendChild(slider);
   speedControls.appendChild(rateLabel);
@@ -380,7 +546,7 @@ function injectFeedBar() {
   speedWrap.appendChild(speedLabel);
   speedWrap.appendChild(speedControls);
 
-  root.appendChild(label);
+  root.appendChild(head);
   root.appendChild(filterInput);
   root.appendChild(clearBtn);
   root.appendChild(speedWrap);
@@ -399,7 +565,8 @@ function injectFeedBar() {
     autoLoadBtn: autoLoadSection.btn,
     autoLoadStatus: autoLoadSection.status,
     hideListenedInput: hideListenedSection.input,
-    meta: meta
+    meta: meta,
+    dockToggle: dockToggle
   };
 
   filterInput.addEventListener("input", function () {
@@ -429,6 +596,7 @@ function injectFeedBar() {
 
   wireIsolation(root);
   ensureOverlayLayoutListener();
+  ensureScDockCollapsedState();
   updateBarUi();
   syncOverlayLayout();
   console.info("[Digger] feed bar mounted");
@@ -507,6 +675,7 @@ function wireSidePanelEvents(root) {
 function createPanelOnlyOption(config) {
   const label = document.createElement("label");
   label.className = "digger-sc-panel-option";
+  if (config.description) label.title = config.description;
 
   const radio = document.createElement("input");
   radio.type = "radio";
@@ -522,175 +691,26 @@ function createPanelOnlyOption(config) {
   optionLabel.className = "digger-sc-panel-option-label";
   optionLabel.textContent = config.label;
 
-  const optionDesc = document.createElement("span");
-  optionDesc.className = "digger-sc-panel-option-desc";
-  optionDesc.textContent = config.description;
-
-  const status = document.createElement("span");
-  status.className = "digger-sc-panel-option-status";
-  status.setAttribute("aria-hidden", "true");
-
   body.appendChild(optionLabel);
-  body.appendChild(optionDesc);
   label.appendChild(radio);
   label.appendChild(body);
-  label.appendChild(status);
 
   updatePanelOptionStatus(label, radio.checked);
-  return { root: label, radio: radio, status: status };
+  return { root: label, radio: radio };
 }
 
 function updatePanelOptionStatus(optionRoot, active) {
   if (!optionRoot) return;
   optionRoot.classList.toggle("is-active", active);
-  const status = optionRoot.querySelector(".digger-sc-panel-option-status");
-  if (status) status.textContent = active ? "Aktiv" : "—";
 }
 
-function injectSidePanel() {
-  ensureIsolatedForm();
-  const root = document.createElement("aside");
-  root.id = PANEL_ID;
-  root.dataset.wired = "panel9";
-  root.dataset.diggerScPanel = "1";
-
-  const title = document.createElement("h3");
-  title.className = "digger-sc-panel-title";
-  title.textContent = "Nur anzeigen";
-
-  const intro = document.createElement("p");
-  intro.className = "digger-sc-panel-intro";
-  intro.textContent = "Nur eine Kategorie gleichzeitig. Erneut klicken = alle anzeigen.";
-
-  const options = document.createElement("div");
-  options.className = "digger-sc-panel-options";
-
-  const setsOption = createPanelOnlyOption({
-    radioClass: "digger-sc-sets-radio",
-    inputId: FIELD_IDS.onlySets,
-    inputName: "diggerScOnlySets",
-    mode: FEED_ONLY_MODES.SETS,
-    label: "Nur DJ-Sets",
-    description: "Länger als 20 Minuten"
-  });
-
-  const tracksOption = createPanelOnlyOption({
-    radioClass: "digger-sc-tracks-radio",
-    inputId: FIELD_IDS.onlyTracks,
-    inputName: "diggerScOnlyTracks",
-    mode: FEED_ONLY_MODES.TRACKS,
-    label: "Nur Einzeltracks",
-    description: "20 Minuten oder kürzer"
-  });
-
-  const freeDlOption = createPanelOnlyOption({
-    radioClass: "digger-sc-freedl-radio",
-    inputId: FIELD_IDS.onlyFreeDl,
-    inputName: "diggerScOnlyFreeDownloads",
-    mode: FEED_ONLY_MODES.FREE_DOWNLOADS,
-    label: "Nur Free Downloads",
-    description: "Titel mit Free, Free Download, Free DL oder Edit"
-  });
-
-  const hint = document.createElement("p");
-  hint.className = "digger-sc-panel-hint";
-  hint.textContent = "Gilt nur auf der Feed-Seite";
-
-  options.appendChild(setsOption.root);
-  options.appendChild(tracksOption.root);
-  options.appendChild(freeDlOption.root);
-  root.appendChild(title);
-  root.appendChild(intro);
-  root.appendChild(options);
-  root.appendChild(hint);
-
-  document.body.appendChild(root);
-
-  panelUi = {
-    setsRadio: setsOption.radio,
-    tracksRadio: tracksOption.radio,
-    freeDownloadsRadio: freeDlOption.radio,
-    setsOption: setsOption.root,
-    tracksOption: tracksOption.root,
-    freeDlOption: freeDlOption.root,
-    scopeHint: hint
-  };
-
-  wireSidePanelEvents(root);
-  wireIsolation(root);
-  updateBarUi();
-  syncOverlayLayout();
-}
-
-function bindPlaysPanel(root) {
-  playsPanelUi = {
-    minPlaysInput: root.querySelector(".digger-sc-min-plays-input"),
-    clearBtn: root.querySelector(".digger-sc-plays-clear-btn"),
-    valueLabel: root.querySelector(".digger-sc-plays-value"),
-    intro: root.querySelector(".digger-sc-plays-intro"),
-    modeMinBtn: root.querySelector(".digger-sc-plays-mode-min"),
-    modeMaxBtn: root.querySelector(".digger-sc-plays-mode-max"),
-    scopeHint: root.querySelector(".digger-sc-plays-hint")
-  };
-  wireIsolation(root);
-  updateBarUi();
-  syncOverlayLayout();
-}
-
-function ensurePlaysPanel() {
-  if (dead) return;
-  dedupeOverlays();
-  const existing = document.getElementById(PLAYS_PANEL_ID);
-  if (!isFeedPage()) {
-    if (existing) existing.style.display = "none";
-    return;
-  }
-  if (existing) {
-    existing.style.display = "";
-    if (existing.dataset.wired !== "plays2") {
-      try {
-        existing.remove();
-      } catch (_) {}
-      playsPanelUi = null;
-      if (playsPanelInjecting) return;
-      playsPanelInjecting = true;
-      try {
-        injectPlaysPanel();
-      } finally {
-        playsPanelInjecting = false;
-      }
-      return;
-    }
-    if (!playsPanelUi) {
-      bindPlaysPanel(existing);
-    }
-    syncOverlayLayout();
-    return;
-  }
-
-  if (playsPanelInjecting) return;
-  playsPanelInjecting = true;
-  try {
-    injectPlaysPanel();
-  } finally {
-    playsPanelInjecting = false;
-  }
-}
-
-function injectPlaysPanel() {
-  ensureIsolatedForm();
-  const root = document.createElement("aside");
-  root.id = PLAYS_PANEL_ID;
-  root.dataset.wired = "plays2";
-  root.dataset.diggerScPlaysPanel = "1";
+function buildPlaysSection() {
+  const section = document.createElement("div");
+  section.className = "digger-sc-plays-section";
 
   const title = document.createElement("h3");
   title.className = "digger-sc-plays-title";
-  title.textContent = "Plays";
-
-  const intro = document.createElement("p");
-  intro.className = "digger-sc-plays-intro";
-  intro.textContent = getPlaysFilterIntro();
+  title.textContent = "Plays-Filter";
 
   const modeSwitch = document.createElement("div");
   modeSwitch.className = "digger-sc-plays-mode-switch";
@@ -750,69 +770,101 @@ function injectPlaysPanel() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "digger-sc-plays-preset-btn";
+    btn.setAttribute("data-plays", String(amount));
     btn.textContent = formatPlayCount(amount);
-    btn.title = (isPlaysMaxMode() ? "Höchstens " : "Mindestens ") +
+    btn.title =
+      (isPlaysMaxMode() ? "Höchstens " : "Mindestens ") +
       amount.toLocaleString("de-DE") +
       " Plays";
-    btn.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      setMinPlays(amount, true);
-      minPlaysInput.value = String(amount);
-      minPlaysInput.focus();
-    });
     presets.appendChild(btn);
   });
 
+  section.appendChild(title);
+  section.appendChild(modeSwitch);
+  section.appendChild(minPlaysInput);
+  section.appendChild(controls);
+  section.appendChild(presets);
+  return section;
+}
+
+function injectSidePanel() {
+  ensureIsolatedForm();
+  removeLegacyPlaysPanel();
+  const root = document.createElement("aside");
+  root.id = PANEL_ID;
+  root.dataset.wired = "panel11";
+  root.dataset.diggerScPanel = "1";
+
+  const title = document.createElement("h3");
+  title.className = "digger-sc-panel-title";
+  title.textContent = "Feed-Filter";
+
+  const onlyHead = document.createElement("h4");
+  onlyHead.className = "digger-sc-section-label";
+  onlyHead.textContent = "Nur anzeigen";
+
+  const options = document.createElement("div");
+  options.className = "digger-sc-panel-options";
+
+  const setsOption = createPanelOnlyOption({
+    radioClass: "digger-sc-sets-radio",
+    inputId: FIELD_IDS.onlySets,
+    inputName: "diggerScOnlySets",
+    mode: FEED_ONLY_MODES.SETS,
+    label: "Nur DJ-Sets",
+    description: "Länger als 20 Minuten"
+  });
+
+  const tracksOption = createPanelOnlyOption({
+    radioClass: "digger-sc-tracks-radio",
+    inputId: FIELD_IDS.onlyTracks,
+    inputName: "diggerScOnlyTracks",
+    mode: FEED_ONLY_MODES.TRACKS,
+    label: "Nur Einzeltracks",
+    description: "20 Minuten oder kürzer"
+  });
+
+  const freeDlOption = createPanelOnlyOption({
+    radioClass: "digger-sc-freedl-radio",
+    inputId: FIELD_IDS.onlyFreeDl,
+    inputName: "diggerScOnlyFreeDownloads",
+    mode: FEED_ONLY_MODES.FREE_DOWNLOADS,
+    label: "Nur Free Downloads",
+    description: "Titel mit Free / Free DL / Edit"
+  });
+
+  options.appendChild(setsOption.root);
+  options.appendChild(tracksOption.root);
+  options.appendChild(freeDlOption.root);
+
+  const playsSection = buildPlaysSection();
+
   const hint = document.createElement("p");
-  hint.className = "digger-sc-plays-hint";
-  hint.textContent = "Gilt nur auf der Feed-Seite";
+  hint.className = "digger-sc-panel-hint";
+  hint.textContent = "Nochmal tippen = alle anzeigen.";
 
   root.appendChild(title);
-  root.appendChild(intro);
-  root.appendChild(modeSwitch);
-  root.appendChild(minPlaysInput);
-  root.appendChild(controls);
-  root.appendChild(presets);
+  root.appendChild(onlyHead);
+  root.appendChild(options);
+  root.appendChild(playsSection);
   root.appendChild(hint);
 
   document.body.appendChild(root);
 
-  playsPanelUi = {
-    minPlaysInput: minPlaysInput,
-    clearBtn: clearBtn,
-    valueLabel: valueLabel,
-    intro: intro,
-    modeMinBtn: modeMinBtn,
-    modeMaxBtn: modeMaxBtn,
+  panelUi = {
+    setsRadio: setsOption.radio,
+    tracksRadio: tracksOption.radio,
+    freeDownloadsRadio: freeDlOption.radio,
+    setsOption: setsOption.root,
+    tracksOption: tracksOption.root,
+    freeDlOption: freeDlOption.root,
     scopeHint: hint
   };
 
-  modeMinBtn.addEventListener("click", function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-    setPlaysFilterMode(PLAYS_FILTER_MODES.MIN, true);
-  });
-
-  modeMaxBtn.addEventListener("click", function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-    setPlaysFilterMode(PLAYS_FILTER_MODES.MAX, true);
-  });
-
-  minPlaysInput.addEventListener("input", function () {
-    setMinPlays(minPlaysInput.value, true);
-  });
-
-  clearBtn.addEventListener("click", function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-    setMinPlays(0, true);
-    minPlaysInput.value = "";
-    minPlaysInput.focus();
-  });
-
+  bindPlaysSection(root);
+  wireSidePanelEvents(root);
   wireIsolation(root);
+  if (isScDockCollapsed()) root.classList.add("is-dock-collapsed");
   updateBarUi();
   syncOverlayLayout();
 }

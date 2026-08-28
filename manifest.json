@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Digger",
-  "version": "1.23.0",
-  "description": "Digging für Soundeo & SoundCloud: Charts, Preview-Tempo, Title-Filter, Artists.",
+  "version": "1.27.1",
+  "description": "Dig-Assistent für Soundeo & SoundCloud: Charts, Tempo, Filter, Gehört / Vormerken / Bewertung.",
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": [
     "https://soundeo.com/*",
@@ -38,6 +38,8 @@
       "matches": ["https://soundeo.com/*"],
       "js": [
         "genres.js",
+        "shared/sanitize.js",
+        "shared/onboarding.js",
         "shared/match-modal.js",
         "shared/client-log-content.js",
         "shared/listen-behavior.js",
@@ -69,6 +71,8 @@
         "https://*.soundcloud.com/*"
       ],
       "js": [
+        "shared/sanitize.js",
+        "shared/onboarding.js",
         "shared/match-modal.js",
         "shared/client-log-content.js",
         "shared/listen-behavior.js",

@@ -284,12 +284,13 @@ function injectDebugPanel() {
   refreshBtn.type = "button";
   refreshBtn.className = "digger-sc-debug-refresh";
   refreshBtn.textContent = "↻";
-  refreshBtn.title = "Refresh";
+  refreshBtn.title = "Aktualisieren";
 
   const copyBtn = document.createElement("button");
   copyBtn.type = "button";
   copyBtn.className = "digger-sc-debug-copy";
-  copyBtn.textContent = "Copy";
+  copyBtn.textContent = "Kopieren";
+  copyBtn.title = "Snapshot kopieren";
 
   const toggleBtn = document.createElement("button");
   toggleBtn.type = "button";
@@ -317,7 +318,26 @@ function injectDebugPanel() {
   bindDebugPanel(root);
 }
 
+function isDebugPerfEnabled() {
+  try {
+    if (localStorage.getItem("diggerDebug") === "1") return true;
+  } catch (_) {}
+  try {
+    if (/[?&]diggerDebug=1(?:&|$)/.test(location.search)) return true;
+  } catch (_) {}
+  return false;
+}
+
 function ensureDebugPanel() {
-  if (dead) return;
+  if (dead || !isDebugPerfEnabled()) {
+    const existing = document.getElementById(DEBUG_ID);
+    if (existing) {
+      try {
+        existing.remove();
+      } catch (_) {}
+    }
+    debugUi = null;
+    return;
+  }
   injectDebugPanel();
 }

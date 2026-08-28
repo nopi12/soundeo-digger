@@ -1,3 +1,4 @@
+importScripts("shared/sanitize.js");
 importScripts("shared/listen-sync.js");
 importScripts("shared/rating-sync.js");
 importScripts("shared/client-log.js");
@@ -28,12 +29,6 @@ const PLATFORM_URLS = {
   ]
 };
 
-function clampRate(rate) {
-  const n = Number(rate);
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(1.2, Math.max(0.8, n));
-}
-
 function clampSourceBpm(bpm) {
   const n = Number(bpm);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -48,49 +43,6 @@ function clampTargetBpm(bpm) {
 
 function normalizeTargetBpm(bpm) {
   return clampTargetBpm(bpm) || DEFAULT_TARGET_BPM;
-}
-
-function normalizeArtistKey(name) {
-  return String(name || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
-
-function sanitizeArtistList(list) {
-  if (!Array.isArray(list)) return [];
-  const out = [];
-  const seen = new Set();
-  for (let i = 0; i < list.length; i++) {
-    const name = String(list[i] || "").trim().replace(/\s+/g, " ");
-    const key = normalizeArtistKey(name);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(name);
-  }
-  return out;
-}
-
-function sanitizeTitleFilter(value) {
-  return String(value || "").trim().slice(0, 120);
-}
-
-function sanitizeFeedOnlyMode(value) {
-  const mode = String(value || "").trim();
-  if (mode === "sets" || mode === "tracks" || mode === "freeDownloads") return mode;
-  return "";
-}
-
-function sanitizeMinPlays(value) {
-  const n = Math.floor(Number(value));
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.min(n, 999999999);
-}
-
-function sanitizePlaysFilterMode(value) {
-  const mode = String(value || "").trim();
-  if (mode === "max") return "max";
-  return "min";
 }
 
 async function getPlayed() {

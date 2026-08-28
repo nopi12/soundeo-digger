@@ -279,7 +279,7 @@ async function openLabelTracksPanel(item, btn) {
     return;
   }
 
-  if (titleEl) titleEl.textContent = "Releases by " + info.name;
+  if (titleEl) titleEl.textContent = "Releases von " + info.name;
   if (countEl) countEl.hidden = true;
 
   if (statusEl) statusEl.textContent = "Lädt Releases…";
@@ -346,7 +346,7 @@ function ensureLabelTracksButton(item, bar) {
     btn.className = "sd-artist-btn sd-label-tracks";
     btn.title = "Weitere Releases vom Label";
     btn.setAttribute("aria-label", "Weitere Releases vom Label");
-    btn.textContent = "▦";
+    btn.textContent = "Label";
     btn.addEventListener(
       "click",
       function (e) {
@@ -358,4 +358,5 @@ function ensureLabelTracksButton(item, bar) {
     );
     bar.appendChild(btn);
   }
+  btn.textContent = "Label";
 }
